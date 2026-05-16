@@ -309,7 +309,7 @@ export default function EventSettings() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto flex flex-col gap-5">
+    <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-5">
       {/* 섹션 1: 행사 시간 */}
       <SectionCard
         icon="📅"
@@ -447,15 +447,16 @@ export default function EventSettings() {
             type="button"
             onClick={clearAnnouncement}
             disabled={savingSection === 'announcement'}
-            className="px-4 py-2 rounded-xl border-2 border-text-dark/10 text-sm font-bold text-text-dark/60 hover:border-[#E94B3C] hover:text-[#E94B3C] disabled:opacity-50"
+            className="px-3 py-2 rounded-xl border-2 border-text-dark/10 text-xs md:text-sm font-bold text-text-dark/60 hover:border-[#E94B3C] hover:text-[#E94B3C] disabled:opacity-50"
           >
-            🗑 공지 삭제
+            🗑 삭제
           </button>
           <button
             type="button"
             onClick={sendAnnouncement}
             disabled={savingSection === 'announcement'}
-            className="px-4 py-2 rounded-xl bg-orange-main text-white text-sm font-bold hover:bg-orange-sub disabled:opacity-50"
+            className="flex-1 md:flex-none px-5 py-3 md:py-2 rounded-xl bg-orange-main text-white text-base md:text-sm font-bold hover:bg-orange-sub disabled:opacity-50"
+            style={{ boxShadow: 'var(--shadow-orange-sm)' }}
           >
             📡 즉시 전송
           </button>
@@ -469,7 +470,8 @@ export default function EventSettings() {
             type="button"
             onClick={startEvent}
             disabled={savingSection === 'control'}
-            className="flex-1 px-4 py-4 rounded-2xl bg-mint text-text-dark text-base font-black hover:bg-[#6FD491] active:scale-[0.98] transition-all disabled:opacity-50"
+            className="flex-1 px-4 py-4 rounded-2xl bg-mint text-text-dark text-lg font-black hover:bg-[#6FD491] active:scale-[0.98] transition-all disabled:opacity-50"
+            style={{ boxShadow: '0 6px 14px -4px rgba(76, 175, 127, 0.4)' }}
           >
             🟢 행사 시작
           </button>
@@ -477,7 +479,7 @@ export default function EventSettings() {
             type="button"
             disabled
             title="다음 단계에서 구현 예정"
-            className="flex-1 px-4 py-4 rounded-2xl bg-text-dark/10 text-text-dark/40 text-base font-black cursor-not-allowed"
+            className="flex-1 px-4 py-4 rounded-2xl bg-text-dark/10 text-text-dark/40 text-lg font-black cursor-not-allowed"
           >
             ⏸ 일시정지 (준비 중)
           </button>
@@ -485,7 +487,7 @@ export default function EventSettings() {
             type="button"
             onClick={forceEndEvent}
             disabled={savingSection === 'control'}
-            className="flex-1 px-4 py-4 rounded-2xl bg-[#E94B3C] text-white text-base font-black hover:bg-[#d83d2f] active:scale-[0.98] transition-all disabled:opacity-50"
+            className="flex-1 px-4 py-4 rounded-2xl bg-[#E94B3C] text-white text-lg font-black hover:bg-[#d83d2f] active:scale-[0.98] transition-all disabled:opacity-50"
           >
             🔴 강제 종료
           </button>
@@ -583,7 +585,7 @@ function SectionCard({
 
   return (
     <section
-      className={`rounded-2xl border-2 ${toneCls} px-5 py-5`}
+      className={`rounded-2xl border-2 ${toneCls} px-4 py-4 md:px-5 md:py-5`}
       style={{ boxShadow: '0 2px 8px -2px rgba(0,0,0,0.04)' }}
     >
       <header className="flex items-center justify-between gap-3 mb-4">

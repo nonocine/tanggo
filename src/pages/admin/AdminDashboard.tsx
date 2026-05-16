@@ -21,18 +21,21 @@ interface TabDef {
   key: TabKey
   icon: string
   label: string
+  shortLabel?: string
 }
 
 const TABS: TabDef[] = [
   { key: 'quiz', icon: '📋', label: '미션 관리' },
   { key: 'teams', icon: '👥', label: '팀 관리' },
-  { key: 'progress', icon: '🎮', label: '게임 진행 상황' },
-  { key: 'approvals', icon: '✋', label: '미션 승인' },
+  { key: 'progress', icon: '🎮', label: '게임 진행 상황', shortLabel: '진행' },
+  { key: 'approvals', icon: '✋', label: '미션 승인', shortLabel: '승인' },
   { key: 'results', icon: '🏆', label: '순위/결과' },
-  { key: 'settings', icon: '⚙', label: '행사 설정' },
+  { key: 'settings', icon: '⚙', label: '행사 설정', shortLabel: '설정' },
   { key: 'reports', icon: '📊', label: '보고서' },
   { key: 'data', icon: '🗑', label: '데이터 관리' },
 ]
+
+const PRIMARY_MOBILE_TABS: TabKey[] = ['progress', 'settings', 'approvals']
 
 function Placeholder({ label }: { label: string }) {
   return (
@@ -52,7 +55,8 @@ function Placeholder({ label }: { label: string }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const [currentTab, setCurrentTab] = useState<TabKey>('quiz')
+  const [currentTab, setCurrentTab] = useState<TabKey>('progress')
+  const [moreOpen, setMoreOpen] = useState(false)
 
   function handleLogout() {
     localStorage.removeItem(ADMIN_AUTH_KEY)
@@ -60,57 +64,51 @@ export default function AdminDashboard() {
   }
 
   const activeLabel = TABS.find((t) => t.key === currentTab)?.label ?? ''
+  const primaryTabs = PRIMARY_MOBILE_TABS.map(
+    (k) => TABS.find((t) => t.key === k)!,
+  )
+  const secondaryTabs = TABS.filter(
+    (t) => !PRIMARY_MOBILE_TABS.includes(t.key),
+  )
+  const isPrimaryActive = PRIMARY_MOBILE_TABS.includes(currentTab)
+
+  function selectTab(k: TabKey) {
+    setCurrentTab(k)
+    setMoreOpen(false)
+  }
 
   return (
     <div className="min-h-screen bg-cream">
       {/* 헤더 */}
       <header className="sticky top-0 z-30 bg-white border-b border-text-dark/10">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-4 py-3 gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xl shrink-0" aria-hidden>
               🛠
             </span>
             <h1 className="text-sm md:text-base font-bold text-text-dark truncate">
-              관리자
-              <span className="text-text-dark/40 mx-1.5">·</span>
-              <span className="text-orange-main">{SEASON_CONFIG.seasonName}</span>
+              <span className="md:hidden">관리자</span>
+              <span className="hidden md:inline">
+                관리자
+                <span className="text-text-dark/40 mx-1.5">·</span>
+                <span className="text-orange-main">
+                  {SEASON_CONFIG.seasonName}
+                </span>
+              </span>
             </h1>
           </div>
           <button
             type="button"
             onClick={handleLogout}
-            className="shrink-0 px-3 py-1.5 text-xs md:text-sm font-bold text-text-dark/70 rounded-lg border border-text-dark/15 hover:bg-cream hover:text-text-dark transition-colors"
+            aria-label="로그아웃"
+            className="shrink-0 inline-flex items-center justify-center text-text-dark/70 rounded-lg border border-text-dark/15 hover:bg-cream hover:text-text-dark transition-colors h-9 px-2 md:px-3 text-base md:text-sm md:font-bold"
           >
-            로그아웃
+            <span className="md:hidden" aria-hidden>
+              🚪
+            </span>
+            <span className="hidden md:inline">로그아웃</span>
           </button>
         </div>
-
-        {/* 모바일 탭바 */}
-        <nav className="md:hidden overflow-x-auto border-t border-text-dark/10">
-          <ul className="flex min-w-max">
-            {TABS.map((t) => {
-              const active = t.key === currentTab
-              return (
-                <li key={t.key}>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentTab(t.key)}
-                    className={`px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${
-                      active
-                        ? 'border-orange-main text-orange-main'
-                        : 'border-transparent text-text-dark/60 hover:text-text-dark'
-                    }`}
-                  >
-                    <span aria-hidden className="mr-1">
-                      {t.icon}
-                    </span>
-                    {t.label}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
       </header>
 
       <div className="md:flex">
@@ -144,7 +142,7 @@ export default function AdminDashboard() {
         </aside>
 
         {/* 본문 */}
-        <main className="flex-1 min-w-0 px-4 md:px-6 py-5 md:py-6">
+        <main className="flex-1 min-w-0 px-3 md:px-6 py-5 md:py-6 pb-24 md:pb-6">
           {currentTab === 'quiz' && <QuizManager />}
           {currentTab === 'teams' && <TeamManager />}
           {currentTab === 'progress' && <GameProgress />}
@@ -155,6 +153,104 @@ export default function AdminDashboard() {
             currentTab !== 'settings' && <Placeholder label={activeLabel} />}
         </main>
       </div>
+
+      {/* 모바일 하단 탭바 */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-text-dark/10"
+        style={{
+          boxShadow: '0 -2px 8px -2px rgba(0,0,0,0.06)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
+        <ul className="grid grid-cols-4">
+          {primaryTabs.map((t) => {
+            const active = t.key === currentTab
+            return (
+              <li key={t.key}>
+                <button
+                  type="button"
+                  onClick={() => selectTab(t.key)}
+                  className={`w-full flex flex-col items-center justify-center py-2.5 transition-colors ${
+                    active ? 'text-orange-main' : 'text-text-dark/50'
+                  }`}
+                >
+                  <span aria-hidden className="text-2xl leading-none">
+                    {t.icon}
+                  </span>
+                  <span className="mt-0.5 text-[11px] font-bold">
+                    {t.shortLabel ?? t.label}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+          <li>
+            <button
+              type="button"
+              onClick={() => setMoreOpen(true)}
+              className={`w-full flex flex-col items-center justify-center py-2.5 transition-colors ${
+                !isPrimaryActive ? 'text-orange-main' : 'text-text-dark/50'
+              }`}
+            >
+              <span aria-hidden className="text-2xl leading-none">
+                ⋯
+              </span>
+              <span className="mt-0.5 text-[11px] font-bold">더보기</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      {/* 더보기 모달 (모바일 전용) */}
+      {moreOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/50 flex items-end"
+          onClick={() => setMoreOpen(false)}
+        >
+          <div
+            className="w-full bg-white rounded-t-3xl px-4 pt-5 animate-slide-in-down"
+            style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-text-dark">메뉴 더보기</h2>
+              <button
+                type="button"
+                onClick={() => setMoreOpen(false)}
+                aria-label="닫기"
+                className="w-9 h-9 inline-flex items-center justify-center rounded-full text-text-dark/50 hover:bg-cream text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <ul className="grid grid-cols-3 gap-3">
+              {secondaryTabs.map((t) => {
+                const active = t.key === currentTab
+                return (
+                  <li key={t.key}>
+                    <button
+                      type="button"
+                      onClick={() => selectTab(t.key)}
+                      className={`w-full aspect-square flex flex-col items-center justify-center rounded-2xl border-2 transition-colors ${
+                        active
+                          ? 'bg-orange-main text-white border-orange-main'
+                          : 'bg-white text-text-dark/70 border-text-dark/10 hover:border-orange-main hover:text-orange-main'
+                      }`}
+                    >
+                      <span aria-hidden className="text-3xl leading-none">
+                        {t.icon}
+                      </span>
+                      <span className="mt-2 text-xs font-bold text-center px-1 leading-tight">
+                        {t.label}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

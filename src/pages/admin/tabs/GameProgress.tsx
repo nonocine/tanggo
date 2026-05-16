@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 
 const POLL_INTERVAL_MS = 5000
-const TICK_INTERVAL_MS = 30_000
+const TICK_INTERVAL_MS = 5000
 
 interface TeamRow {
   id: string
@@ -68,12 +68,21 @@ function statusBadge(t: TeamRow) {
   return { label: '🟡 시작 전', cls: 'bg-[#F4C430]/20 text-[#A88300]' }
 }
 
+function rankLabel(idx: number): string {
+  const rank = idx + 1
+  if (rank === 1) return '🥇'
+  if (rank === 2) return '🥈'
+  if (rank === 3) return '🥉'
+  return `#${rank}`
+}
+
 export default function GameProgress() {
   const [teams, setTeams] = useState<TeamProgress[]>([])
   const [totalQuizzes, setTotalQuizzes] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(new Date())
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null)
 
   const fetchAll = useCallback(async () => {
     const [teamsRes, answersRes, countRes] = await Promise.all([
@@ -135,6 +144,7 @@ export default function GameProgress() {
     setTotalQuizzes(total)
     setError(null)
     setLoading(false)
+    setLastFetchedAt(new Date())
   }, [])
 
   useEffect(() => {
@@ -200,7 +210,19 @@ export default function GameProgress() {
   const allPending = teams.length > 0 && stats.pendingTeams === teams.length
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 md:gap-4">
+      {/* 마지막 업데이트 */}
+      <div className="flex items-center justify-end gap-1.5 text-[11px] text-text-dark/40">
+        <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full bg-mint animate-pulse" />
+        <span>
+          마지막 업데이트:{' '}
+          <span className="tabular-nums">
+            {lastFetchedAt ? relTime(lastFetchedAt.toISOString(), now) : '—'}
+          </span>{' '}
+          · 5초마다 자동 갱신
+        </span>
+      </div>
+
       {/* 통계 4개 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
         <StatCard icon="📋" label="전체 팀" value={`${stats.totalTeams}팀`} />
@@ -225,8 +247,8 @@ export default function GameProgress() {
       </div>
 
       {/* 평균 진행률 */}
-      <div className="rounded-2xl bg-white border border-text-dark/10 p-5">
-        <div className="flex items-baseline justify-between mb-3">
+      <div className="rounded-2xl bg-white border border-text-dark/10 p-4 md:p-5">
+        <div className="flex items-baseline justify-between mb-3 flex-wrap gap-1">
           <p className="text-sm font-bold text-text-dark">평균 진행률</p>
           <p className="text-sm font-bold text-text-dark/70 tabular-nums">
             <span className="text-orange-main text-lg">{stats.avgCorrect}</span>
@@ -243,7 +265,7 @@ export default function GameProgress() {
       </div>
 
       {/* 팀 목록 */}
-      <div className="rounded-2xl bg-white border border-text-dark/10 overflow-hidden">
+      <div className="rounded-2xl bg-white border border-text-dark/10 md:overflow-hidden">
         {teams.length === 0 ? (
           <div className="py-20 text-center">
             <div className="text-4xl mb-3" aria-hidden>
@@ -266,7 +288,77 @@ export default function GameProgress() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* 모바일: 카드 리스트 */}
+            <ul className="md:hidden flex flex-col divide-y divide-text-dark/5">
+              {teams.map((t, idx) => {
+                const badge = statusBadge(t)
+                const pct =
+                  totalQuizzes === 0
+                    ? 0
+                    : Math.round((t.correct_count / totalQuizzes) * 100)
+                return (
+                  <li key={t.id} className="px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="shrink-0 text-base font-black text-text-dark tabular-nums"
+                          aria-label={`${idx + 1}위`}
+                        >
+                          {rankLabel(idx)}
+                        </span>
+                        <p className="text-base font-bold text-text-dark truncate">
+                          {t.team_name}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${badge.cls}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex items-baseline justify-between gap-2">
+                      <p className="text-sm font-bold text-text-dark tabular-nums">
+                        <span className="text-orange-main">
+                          {t.correct_count}
+                        </span>
+                        <span className="text-text-dark/40">
+                          {' '}
+                          / {totalQuizzes}
+                        </span>{' '}
+                        미션{' '}
+                        <span className="text-text-dark/60">({pct}%)</span>
+                      </p>
+                    </div>
+
+                    <div className="mt-1.5 h-2 rounded-full bg-text-dark/10 overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${progressBg(pct)}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[11px] tabular-nums">
+                      <span className="text-text-dark/50">
+                        시작 {formatHM(t.started_at)}
+                      </span>
+                      <span
+                        className={`font-semibold ${activityColor(t.last_activity, now)}`}
+                      >
+                        마지막{' '}
+                        {t.last_activity
+                          ? relTime(t.last_activity, now)
+                          : '—'}
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {/* 데스크탑: 테이블 */}
+            <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-cream text-text-dark/70">
                 <tr>
@@ -336,7 +428,8 @@ export default function GameProgress() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
