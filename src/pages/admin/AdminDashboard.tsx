@@ -4,6 +4,8 @@ import { SEASON_CONFIG } from '../../config/seasonConfig'
 import { ADMIN_AUTH_KEY } from '../../components/AdminProtected'
 import QuizManager from './tabs/QuizManager'
 import TeamManager from './tabs/TeamManager'
+import GameProgress from './tabs/GameProgress'
+import EventSettings from './tabs/EventSettings'
 
 type TabKey =
   | 'quiz'
@@ -145,9 +147,12 @@ export default function AdminDashboard() {
         <main className="flex-1 min-w-0 px-4 md:px-6 py-5 md:py-6">
           {currentTab === 'quiz' && <QuizManager />}
           {currentTab === 'teams' && <TeamManager />}
-          {currentTab !== 'quiz' && currentTab !== 'teams' && (
-            <Placeholder label={activeLabel} />
-          )}
+          {currentTab === 'progress' && <GameProgress />}
+          {currentTab === 'settings' && <EventSettings />}
+          {currentTab !== 'quiz' &&
+            currentTab !== 'teams' &&
+            currentTab !== 'progress' &&
+            currentTab !== 'settings' && <Placeholder label={activeLabel} />}
         </main>
       </div>
     </div>
