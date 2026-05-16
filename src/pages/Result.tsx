@@ -67,6 +67,7 @@ export default function Result() {
   const navigate = useNavigate()
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+  const memberName = useTeamStore((s) => s.memberName)
 
   const [team, setTeam] = useState<TeamRow | null>(null)
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
@@ -199,6 +200,11 @@ export default function Result() {
         <h1 className="mt-1 text-2xl font-black text-text-dark">
           {teamName ?? team?.team_name ?? '???'}
         </h1>
+        {memberName && (
+          <p className="mt-1 text-sm font-bold text-orange-main">
+            {memberName}님, 수고하셨어요! 🙌
+          </p>
+        )}
       </header>
 
       <main className="flex-1 mx-auto w-full max-w-2xl px-4 py-5">

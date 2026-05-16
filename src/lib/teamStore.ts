@@ -5,7 +5,8 @@ import { supabase } from './supabase'
 interface TeamStore {
   teamId: string | null
   teamName: string | null
-  setTeam: (id: string, name: string) => void
+  memberName: string | null
+  setTeam: (id: string, name: string, memberName?: string | null) => void
   clearTeam: () => void
 }
 
@@ -14,8 +15,10 @@ export const useTeamStore = create<TeamStore>()(
     (set) => ({
       teamId: null,
       teamName: null,
-      setTeam: (id, name) => set({ teamId: id, teamName: name }),
-      clearTeam: () => set({ teamId: null, teamName: null }),
+      memberName: null,
+      setTeam: (id, name, memberName = null) =>
+        set({ teamId: id, teamName: name, memberName }),
+      clearTeam: () => set({ teamId: null, teamName: null, memberName: null }),
     }),
     { name: 'tanggo_team' },
   ),
