@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { APP_CONFIG } from '../config/appConfig'
 import { SEASON_CONFIG } from '../config/seasonConfig'
@@ -7,19 +6,6 @@ import SeasonTitle from '../components/SeasonTitle'
 
 export default function Landing() {
   const navigate = useNavigate()
-  const [gearOpen, setGearOpen] = useState(false)
-  const gearRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!gearOpen) return
-    const onClick = (e: MouseEvent) => {
-      if (gearRef.current && !gearRef.current.contains(e.target as Node)) {
-        setGearOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [gearOpen])
 
   const footerText = `${APP_CONFIG.appName} · ${SEASON_CONFIG.seasonName} · ${APP_CONFIG.appOrganizer}`
 
@@ -125,47 +111,32 @@ export default function Landing() {
         </div>
 
         {/* 푸터 */}
-        <footer className="mt-auto pt-10 flex items-center justify-center relative">
+        <footer className="mt-auto pt-10 flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-1">
+            <p className="text-xs text-gray-400">행사 운영진 전용</p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                관리자
+              </button>
+              <span aria-hidden className="text-gray-300">
+                ·
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/operator')}
+                className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                운영자
+              </button>
+            </div>
+          </div>
           <p className="text-[11px] font-medium text-text-dark/40 text-center">
             {footerText}
           </p>
-
-          <div ref={gearRef} className="absolute right-0 bottom-0">
-            <button
-              type="button"
-              aria-label="관리자/운영자 메뉴"
-              onClick={() => setGearOpen((v) => !v)}
-              className="w-9 h-9 inline-flex items-center justify-center rounded-full text-text-dark/40 hover:text-text-dark/70 hover:bg-white transition-colors"
-            >
-              <span aria-hidden className="text-lg">
-                ⚙
-              </span>
-            </button>
-            {gearOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 bottom-11 w-32 overflow-hidden rounded-xl bg-white py-1"
-                style={{ boxShadow: 'var(--shadow-orange-sm)' }}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => navigate('/admin')}
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-text-dark hover:bg-cream"
-                >
-                  관리자
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => navigate('/operator')}
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-text-dark hover:bg-cream"
-                >
-                  운영자
-                </button>
-              </div>
-            )}
-          </div>
         </footer>
       </div>
     </div>
