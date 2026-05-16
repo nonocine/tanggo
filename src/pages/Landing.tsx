@@ -112,24 +112,27 @@ export default function Landing() {
 
         {/* 푸터 */}
         <footer className="mt-auto pt-10 flex flex-col items-center gap-4">
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-2">
             <p className="text-xs text-gray-400">행사 운영진 전용</p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => navigate('/admin')}
-                className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                className="px-4 py-2.5 rounded-2xl bg-[#FFF0E8] border-2 border-orange-main text-orange-main text-sm font-bold hover:bg-[#FFE0D0] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
               >
+                <span className="mr-1" aria-hidden>
+                  🛠
+                </span>
                 관리자
               </button>
-              <span aria-hidden className="text-gray-300">
-                ·
-              </span>
               <button
                 type="button"
                 onClick={() => navigate('/operator')}
-                className="text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                className="px-4 py-2.5 rounded-2xl bg-[#E8F5EC] border-2 border-[#4CAF7F] text-[#4CAF7F] text-sm font-bold hover:bg-[#D0EBD8] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
               >
+                <span className="mr-1" aria-hidden>
+                  ✋
+                </span>
                 운영자
               </button>
             </div>

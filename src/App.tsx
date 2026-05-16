@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import SplashScreen from './components/SplashScreen'
 import AdminProtected from './components/AdminProtected'
+import OperatorProtected from './components/OperatorProtected'
 import Landing from './pages/Landing'
 import TeamCreate from './pages/TeamCreate'
 import TeamJoin from './pages/TeamJoin'
 import Lobby from './pages/Lobby'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
+import OperatorLogin from './pages/operator/OperatorLogin'
+import OperatorDashboard from './pages/operator/OperatorDashboard'
 
 const SPLASH_FLAG = 'tanggo_splash_shown'
 
@@ -38,7 +41,15 @@ function App() {
         <Route path="/lobby" element={<Lobby />} />
         <Route path="/mission" element={<div className="p-8">/mission</div>} />
         <Route path="/result" element={<div className="p-8">/result</div>} />
-        <Route path="/operator" element={<div className="p-8">/operator</div>} />
+        <Route path="/operator" element={<OperatorLogin />} />
+        <Route
+          path="/operator/dashboard"
+          element={
+            <OperatorProtected>
+              <OperatorDashboard />
+            </OperatorProtected>
+          }
+        />
         <Route path="/admin" element={<AdminLogin />} />
         <Route
           path="/admin/dashboard"
