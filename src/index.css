@@ -1,1 +1,10 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
+
+body {
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--color-cream);
+  color: var(--color-text-dark);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
