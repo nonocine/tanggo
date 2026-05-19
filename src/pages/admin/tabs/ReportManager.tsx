@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { APP_CONFIG } from '../../../config/appConfig'
 import { SEASON_CONFIG } from '../../../config/seasonConfig'
 import {
@@ -13,6 +13,15 @@ import {
 import { exportReportExcel } from '../../../lib/reportExcel'
 import { todayStamp } from '../../../lib/quizExcel'
 import { SURVEY_TYPE_EMOJI, SURVEY_TYPE_LABEL } from '../../../lib/surveyTypes'
+import {
+  NARRATIVE_SECTIONS,
+  clearNarrativeOverrides,
+  generateNarrative,
+  loadNarrativeOverrides,
+  mergeNarrative,
+  saveNarrativeOverrides,
+  type NarrativeReport,
+} from '../../../lib/reportNarrative'
 
 export default function ReportManager() {
   const [data, setData] = useState<ReportData | null>(null)
@@ -21,6 +30,10 @@ export default function ReportManager() {
   const [docxBusy, setDocxBusy] = useState(false)
   const [xlsxBusy, setXlsxBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [narrative, setNarrative] = useState<NarrativeReport | null>(null)
+  const [overrideKeys, setOverrideKeys] = useState<Set<keyof NarrativeReport>>(
+    new Set(),
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,17 +52,71 @@ export default function ReportManager() {
     load()
   }, [load])
 
+  // 데이터 로드 후 자동 초안 생성 + localStorage 덮어쓰기
+  useEffect(() => {
+    if (!data) return
+    const base = generateNarrative(data)
+    const overrides = loadNarrativeOverrides()
+    setNarrative(mergeNarrative(base, overrides))
+    setOverrideKeys(new Set(Object.keys(overrides) as (keyof NarrativeReport)[]))
+  }, [data])
+
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
     return () => clearTimeout(t)
   }, [toast])
 
+  // debounce 저장
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleSave = useCallback(
+    (key: keyof NarrativeReport, value: string | null) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(() => {
+        const prev = loadNarrativeOverrides()
+        const next = { ...prev, [key]: value }
+        saveNarrativeOverrides(next)
+      }, 1000)
+    },
+    [],
+  )
+
+  function updateSection(key: keyof NarrativeReport, value: string) {
+    if (!narrative) return
+    setNarrative({ ...narrative, [key]: value })
+    setOverrideKeys((prev) => {
+      const n = new Set(prev)
+      n.add(key)
+      return n
+    })
+    scheduleSave(key, value)
+  }
+
+  function resetNarrative() {
+    if (!data) return
+    const ok = window.confirm(
+      '수정한 내용을 모두 삭제하고 자동 생성 초안으로 되돌립니다.\n계속할까요?',
+    )
+    if (!ok) return
+    clearNarrativeOverrides()
+    setNarrative(generateNarrative(data))
+    setOverrideKeys(new Set())
+    setToast('서술형 보고서를 초기화했어요')
+  }
+
+  const visibleSections = useMemo(() => {
+    if (!narrative) return []
+    return NARRATIVE_SECTIONS.filter((s) => {
+      if (s.key === 'survey') return narrative.survey !== null
+      return true
+    })
+  }, [narrative])
+
   async function handleDocx() {
-    if (!data || docxBusy) return
+    if (!data || !narrative || docxBusy) return
     setDocxBusy(true)
     try {
-      const blob = await generateReportDocx(data)
+      const blob = await generateReportDocx(data, narrative)
       downloadBlob(
         blob,
         `${APP_CONFIG.appName}_결과보고서_${todayStamp()}.docx`,
@@ -62,11 +129,12 @@ export default function ReportManager() {
   }
 
   async function handleXlsx() {
-    if (!data || xlsxBusy) return
+    if (!data || !narrative || xlsxBusy) return
     setXlsxBusy(true)
     try {
       exportReportExcel(
         data,
+        narrative,
         `${APP_CONFIG.appName}_결과보고서_${todayStamp()}.xlsx`,
       )
       setToast('엑셀 명단을 다운로드했어요')
@@ -371,6 +439,55 @@ export default function ReportManager() {
               </div>
             )}
           </>
+        )}
+      </section>
+
+      {/* 서술형 보고서 (편집 가능) */}
+      <section className="rounded-2xl bg-white border border-text-dark/10 p-4">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <h3 className="text-sm font-bold text-text-dark">
+            📝 서술형 보고서 <span className="text-text-dark/40 font-medium">(편집 가능)</span>
+          </h3>
+          <button
+            type="button"
+            onClick={resetNarrative}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold border border-text-dark/15 text-text-dark/70 hover:bg-cream"
+          >
+            🔄 초기화
+          </button>
+        </div>
+        <p className="text-[11px] text-text-dark/50 mb-3">
+          자동 생성된 초안을 자유롭게 수정할 수 있어요. 수정한 내용은 자동 저장되며 Word/엑셀 다운로드에 그대로 반영됩니다.
+        </p>
+        {narrative ? (
+          <div className="flex flex-col gap-3">
+            {visibleSections.map((s) => {
+              const value = narrative[s.key] ?? ''
+              const edited = overrideKeys.has(s.key)
+              return (
+                <div key={s.key} className="rounded-xl bg-cream/40 p-3">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <p className="text-xs font-bold text-text-dark">
+                      {s.title}
+                    </p>
+                    {edited && (
+                      <span className="text-[10px] font-bold text-orange-main bg-orange-main/10 px-1.5 py-0.5 rounded-full">
+                        수정됨
+                      </span>
+                    )}
+                  </div>
+                  <textarea
+                    value={value}
+                    onChange={(e) => updateSection(s.key, e.target.value)}
+                    rows={Math.min(8, Math.max(3, value.split('\n').length + 1))}
+                    className="w-full px-3 py-2 rounded-lg border-2 border-text-dark/10 bg-white text-sm font-medium leading-relaxed text-text-dark focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20 resize-y"
+                  />
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-text-dark/50">서술형 보고서 준비 중...</p>
         )}
       </section>
 

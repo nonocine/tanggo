@@ -4,6 +4,8 @@ import { APP_CONFIG } from '../config/appConfig'
 import type { ReportData } from './reportData'
 import { formatElapsed } from './reportData'
 import { SURVEY_TYPE_LABEL } from './surveyTypes'
+import type { NarrativeReport } from './reportNarrative'
+import { NARRATIVE_SECTIONS } from './reportNarrative'
 
 function todayKor(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -21,9 +23,25 @@ function typeLabel(t: string, sub: string | null | undefined): string {
   return t
 }
 
-export function exportReportExcel(data: ReportData, filename: string): void {
+export function exportReportExcel(
+  data: ReportData,
+  narrative: NarrativeReport,
+  filename: string,
+): void {
   const wb = XLSX.utils.book_new()
   const b = data.basic
+
+  // 시트0: 서술형 보고서 (편집 가능 본문)
+  const narrativeRows: (string | number)[][] = [
+    ['섹션', '내용'],
+  ]
+  for (const s of NARRATIVE_SECTIONS) {
+    const value = narrative[s.key]
+    narrativeRows.push([s.title, value ?? ''])
+  }
+  const wsN = XLSX.utils.aoa_to_sheet(narrativeRows)
+  wsN['!cols'] = [{ wch: 20 }, { wch: 100 }]
+  XLSX.utils.book_append_sheet(wb, wsN, '서술형_보고서')
 
   // 시트1: 행사 개요
   const overviewRows: (string | number)[][] = [

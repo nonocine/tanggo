@@ -21,6 +21,7 @@ import {
   formatElapsed,
 } from './reportData'
 import { SURVEY_TYPE_LABEL } from './surveyTypes'
+import type { NarrativeReport } from './reportNarrative'
 
 const FONT = '맑은 고딕'
 const ORANGE = 'F26B3A'
@@ -117,6 +118,25 @@ function spacer(half = false): Paragraph {
   })
 }
 
+function narrativeParagraphs(text: string): Paragraph[] {
+  const trimmed = text.trim()
+  if (!trimmed) return []
+  const lines = trimmed.split(/\n+/).filter((s) => s.trim())
+  return lines.map((line) =>
+    new Paragraph({
+      spacing: { line: 360 },
+      children: [
+        new TextRun({
+          text: line.trim(),
+          size: 22,
+          color: TEXT_DARK,
+          font: FONT,
+        }),
+      ],
+    }),
+  )
+}
+
 function pageBreak(): Paragraph {
   return new Paragraph({
     children: [new TextRun({ text: '', break: 1 })],
@@ -149,7 +169,10 @@ function buildCoverSection(data: ReportData): Paragraph[] {
   ]
 }
 
-function buildOverviewSection(data: ReportData): (Paragraph | Table)[] {
+function buildOverviewSection(
+  data: ReportData,
+  narrative: string,
+): (Paragraph | Table)[] {
   return [
     h('1. 행사 개요', HeadingLevel.HEADING_1, ORANGE.toLowerCase()),
     spacer(true),
@@ -179,10 +202,15 @@ function buildOverviewSection(data: ReportData): (Paragraph | Table)[] {
         cell(todayKor(data.fetchedAt)),
       ]),
     ]),
+    spacer(true),
+    ...narrativeParagraphs(narrative),
   ]
 }
 
-function buildParticipationSection(data: ReportData): (Paragraph | Table)[] {
+function buildParticipationSection(
+  data: ReportData,
+  narrative: string,
+): (Paragraph | Table)[] {
   const b = data.basic
   return [
     h('2. 참여 현황', HeadingLevel.HEADING_1, ORANGE.toLowerCase()),
@@ -204,16 +232,25 @@ function buildParticipationSection(data: ReportData): (Paragraph | Table)[] {
       row([cell('평균 정답 미션'), cell(`${b.avgCorrect}개 (${b.avgCorrectPct}%)`, { align: AlignmentType.CENTER })]),
       row([cell('평균 소요 시간 (완료팀)'), cell(formatElapsed(b.avgElapsedSec), { align: AlignmentType.CENTER })]),
     ]),
+    spacer(true),
+    ...narrativeParagraphs(narrative),
   ]
 }
 
-function buildMissionSection(data: ReportData): (Paragraph | Table)[] {
+function buildMissionSection(
+  data: ReportData,
+  narrative: string,
+): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = []
   out.push(h('3. 미션 분석', HeadingLevel.HEADING_1, ORANGE.toLowerCase()))
   out.push(spacer(true))
 
   if (data.missionStats.length === 0) {
     out.push(p('등록된 활성 미션이 없습니다.', { color: '666666' }))
+    if (narrative.trim()) {
+      out.push(spacer(true))
+      out.push(...narrativeParagraphs(narrative))
+    }
     return out
   }
 
@@ -257,6 +294,10 @@ function buildMissionSection(data: ReportData): (Paragraph | Table)[] {
   out.push(p('▷ 가장 쉬운 미션 TOP 3', { bold: true }))
   out.push(spacer(true))
   out.push(buildTop3Table(data.easiestTop3))
+  if (narrative.trim()) {
+    out.push(spacer())
+    out.push(...narrativeParagraphs(narrative))
+  }
   return out
 }
 
@@ -305,12 +346,19 @@ function typeLabel(
   return t
 }
 
-function buildRankingSection(data: ReportData): (Paragraph | Table)[] {
+function buildRankingSection(
+  data: ReportData,
+  narrative: string,
+): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = []
   out.push(h('4. 팀별 성과', HeadingLevel.HEADING_1, ORANGE.toLowerCase()))
   out.push(spacer(true))
   if (data.rankings.length === 0) {
     out.push(p('등록된 팀이 없습니다.', { color: '666666' }))
+    if (narrative.trim()) {
+      out.push(spacer(true))
+      out.push(...narrativeParagraphs(narrative))
+    }
     return out
   }
   const headerRow = row(
@@ -343,10 +391,17 @@ function buildRankingSection(data: ReportData): (Paragraph | Table)[] {
     ])
   })
   out.push(table([headerRow, ...bodyRows]))
+  if (narrative.trim()) {
+    out.push(spacer())
+    out.push(...narrativeParagraphs(narrative))
+  }
   return out
 }
 
-function buildSurveySection(data: ReportData): (Paragraph | Table)[] {
+function buildSurveySection(
+  data: ReportData,
+  narrative: string | null,
+): (Paragraph | Table)[] {
   const s = data.surveyStats
   const out: (Paragraph | Table)[] = []
   out.push(h('5. 만족도 조사 결과', HeadingLevel.HEADING_1, ORANGE.toLowerCase()))
@@ -354,6 +409,10 @@ function buildSurveySection(data: ReportData): (Paragraph | Table)[] {
 
   if (s.questionCount === 0) {
     out.push(p('등록된 설문 질문이 없습니다.', { color: '666666' }))
+    if (narrative && narrative.trim()) {
+      out.push(spacer(true))
+      out.push(...narrativeParagraphs(narrative))
+    }
     return out
   }
 
@@ -470,61 +529,33 @@ function buildSurveySection(data: ReportData): (Paragraph | Table)[] {
     }
   }
 
+  if (narrative && narrative.trim()) {
+    out.push(spacer())
+    out.push(...narrativeParagraphs(narrative))
+  }
+
   return out
 }
 
-function buildConclusionSection(data: ReportData): Paragraph[] {
-  const b = data.basic
-  const s = data.surveyStats
-  const lines: string[] = []
-  lines.push(
-    `총 ${b.totalTeams}팀(${b.totalMembers}명)이 참여하여 ${b.finishedTeams}팀이 모든 미션을 완료했습니다. (목표 달성률 ${b.goalRatePct}%)`,
-  )
-  if (b.avgElapsedSec !== null) {
-    lines.push(
-      `완료 팀의 평균 소요 시간은 ${formatElapsed(b.avgElapsedSec)} 였습니다.`,
-    )
-  }
-  if (s.ratings.length > 0) {
-    const avgs = s.ratings
-      .filter((r) => r.avg !== null)
-      .map((r) => r.avg as number)
-    if (avgs.length > 0) {
-      const overallAvg = avgs.reduce((a, b) => a + b, 0) / avgs.length
-      const pct = Math.round((overallAvg / 5) * 100)
-      lines.push(
-        `만족도 별점 평균은 ${overallAvg.toFixed(2)} / 5점 (${pct}%) 으로 ${
-          pct >= 80 ? '높은 만족도를 보였습니다.' : pct >= 60 ? '양호한 만족도를 보였습니다.' : '추가 보완이 필요한 수준입니다.'
-        }`,
-      )
-    }
-  }
-  if (s.respondentCount > 0) {
-    lines.push(
-      `설문에는 ${s.respondentCount}명이 응답하여 총 ${s.responseCount}건의 의견이 수집되었습니다.`,
-    )
-  }
-  lines.push(
-    '본 행사에서 수집된 데이터와 의견을 바탕으로 다음 행사를 더욱 풍성하게 기획하겠습니다.',
-  )
-
+function buildConclusionSection(narrative: string): (Paragraph | Table)[] {
   return [
-    h('6. 결론', HeadingLevel.HEADING_1, ORANGE.toLowerCase()),
+    h('6. 결론 및 시사점', HeadingLevel.HEADING_1, ORANGE.toLowerCase()),
     spacer(true),
-    ...lines.map((line) => p(line, { size: 22 })),
+    ...narrativeParagraphs(narrative),
   ]
 }
 
 export async function generateReportDocx(
   data: ReportData,
+  narrative: NarrativeReport,
 ): Promise<Blob> {
   const cover = buildCoverSection(data)
-  const overview = buildOverviewSection(data)
-  const participation = buildParticipationSection(data)
-  const mission = buildMissionSection(data)
-  const ranking = buildRankingSection(data)
-  const survey = buildSurveySection(data)
-  const conclusion = buildConclusionSection(data)
+  const overview = buildOverviewSection(data, narrative.overview)
+  const participation = buildParticipationSection(data, narrative.participation)
+  const mission = buildMissionSection(data, narrative.missions)
+  const ranking = buildRankingSection(data, narrative.teams)
+  const survey = buildSurveySection(data, narrative.survey)
+  const conclusion = buildConclusionSection(narrative.conclusion)
 
   const doc = new Document({
     creator: APP_CONFIG.appOrganizer,
