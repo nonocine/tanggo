@@ -5,6 +5,7 @@ import {
   QUIZ_TYPE_BADGE,
   QUIZ_TYPE_EMOJI,
   QUIZ_TYPE_LABEL,
+  MISSION_SUBTYPE_SHORT,
 } from '../../../lib/quizTypes'
 import {
   downloadQuizTemplate,
@@ -199,7 +200,9 @@ export default function QuizManager() {
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${QUIZ_TYPE_BADGE[q.type]}`}
                       >
                         <span aria-hidden>{QUIZ_TYPE_EMOJI[q.type]}</span>
-                        {QUIZ_TYPE_LABEL[q.type]}
+                        {q.type === 'mission' && q.mission_subtype
+                          ? `현장(${MISSION_SUBTYPE_SHORT[q.mission_subtype]})`
+                          : QUIZ_TYPE_LABEL[q.type]}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-text-dark max-w-md">

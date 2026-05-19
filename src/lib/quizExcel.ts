@@ -1,9 +1,10 @@
 import * as XLSX from 'xlsx'
-import type { Quiz, QuizInput, QuizType } from './quizTypes'
+import type { MissionSubtype, Quiz, QuizInput, QuizType } from './quizTypes'
 
 const HEADERS = [
   '번호',
   '유형',
+  '세부',
   '문제',
   '위치힌트',
   '보기1',
@@ -29,6 +30,24 @@ const TYPE_TO_KOR: Record<QuizType, string> = {
   text: '주관식',
   choice: '객관식',
   mission: '현장 미션',
+}
+
+const SUBTYPE_FROM_KOR: Record<string, MissionSubtype> = {
+  영상: 'video',
+  사진: 'photo',
+  인증: 'verify',
+  '영상 업로드': 'video',
+  '사진 업로드': 'photo',
+  '직접 인증': 'verify',
+  video: 'video',
+  photo: 'photo',
+  verify: 'verify',
+}
+
+const SUBTYPE_TO_KOR: Record<MissionSubtype, string> = {
+  video: '영상',
+  photo: '사진',
+  verify: '인증',
 }
 
 interface ParseResult {
@@ -65,6 +84,7 @@ export async function parseQuizExcel(file: File): Promise<ParseResult> {
     const rowNum = i + 2 // header row = 1
     const orderNumRaw = n(raw['번호'])
     const typeRaw = s(raw['유형'])
+    const subtypeRaw = s(raw['세부'])
     const question = s(raw['문제'])
 
     if (orderNumRaw === null && !typeRaw && !question) return // skip blank rows
@@ -81,6 +101,26 @@ export async function parseQuizExcel(file: File): Promise<ParseResult> {
     if (!question) {
       errors.push({ row: rowNum, message: '문제가 비어 있어요' })
       return
+    }
+
+    let mission_subtype: MissionSubtype | null = null
+    if (type === 'mission') {
+      if (!subtypeRaw) {
+        errors.push({
+          row: rowNum,
+          message: '현장 미션은 "세부"가 필요해요 (영상/사진/인증)',
+        })
+        return
+      }
+      const st = SUBTYPE_FROM_KOR[subtypeRaw]
+      if (!st) {
+        errors.push({
+          row: rowNum,
+          message: `세부가 올바르지 않아요: "${subtypeRaw}" (영상/사진/인증)`,
+        })
+        return
+      }
+      mission_subtype = st
     }
 
     const locationHint = s(raw['위치힌트']) || null
@@ -131,6 +171,7 @@ export async function parseQuizExcel(file: File): Promise<ParseResult> {
     rows.push({
       order_num: orderNumRaw,
       type,
+      mission_subtype,
       question,
       location_hint: locationHint,
       choices,
@@ -150,6 +191,7 @@ export function exportQuizzesToExcel(quizzes: Quiz[], filename: string): void {
     data.push([
       q.order_num,
       TYPE_TO_KOR[q.type],
+      q.mission_subtype ? SUBTYPE_TO_KOR[q.mission_subtype] : '',
       q.question,
       q.location_hint ?? '',
       q.choices?.[0] ?? '',
@@ -165,6 +207,7 @@ export function exportQuizzesToExcel(quizzes: Quiz[], filename: string): void {
   ws['!cols'] = [
     { wch: 6 },
     { wch: 10 },
+    { wch: 8 },
     { wch: 40 },
     { wch: 20 },
     { wch: 12 },
@@ -186,6 +229,7 @@ export function downloadQuizTemplate(filename: string): void {
     [
       1,
       '주관식',
+      '',
       '학교 정문 입구 동상 이름은?',
       '1F 정문 앞',
       '',
@@ -199,6 +243,7 @@ export function downloadQuizTemplate(filename: string): void {
     [
       2,
       '객관식',
+      '',
       '교무실은 몇 층에 있나요?',
       '안내판 참고',
       '1층',
@@ -212,6 +257,7 @@ export function downloadQuizTemplate(filename: string): void {
     [
       3,
       '현장 미션',
+      '인증',
       '도서관 사서 선생님과 하이파이브!',
       '3F 도서관',
       '',
@@ -222,11 +268,40 @@ export function downloadQuizTemplate(filename: string): void {
       '',
       '운영자가 확인해줘요',
     ],
+    [
+      4,
+      '현장 미션',
+      '영상',
+      '단체로 K-POP 30초 챌린지 영상 찍기',
+      '강당',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
+    [
+      5,
+      '현장 미션',
+      '사진',
+      '교장 선생님과 단체 셀카',
+      '교장실 앞',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
   ]
   const ws = XLSX.utils.aoa_to_sheet(data)
   ws['!cols'] = [
     { wch: 6 },
     { wch: 10 },
+    { wch: 8 },
     { wch: 40 },
     { wch: 20 },
     { wch: 12 },

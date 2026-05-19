@@ -6,6 +6,7 @@ import QuizManager from './tabs/QuizManager'
 import TeamManager from './tabs/TeamManager'
 import GameProgress from './tabs/GameProgress'
 import EventSettings from './tabs/EventSettings'
+import MissionApproval from './tabs/MissionApproval'
 
 type TabKey =
   | 'quiz'
@@ -147,10 +148,12 @@ export default function AdminDashboard() {
           {currentTab === 'teams' && <TeamManager />}
           {currentTab === 'progress' && <GameProgress />}
           {currentTab === 'settings' && <EventSettings />}
+          {currentTab === 'approvals' && <MissionApproval />}
           {currentTab !== 'quiz' &&
             currentTab !== 'teams' &&
             currentTab !== 'progress' &&
-            currentTab !== 'settings' && <Placeholder label={activeLabel} />}
+            currentTab !== 'settings' &&
+            currentTab !== 'approvals' && <Placeholder label={activeLabel} />}
         </main>
       </div>
 

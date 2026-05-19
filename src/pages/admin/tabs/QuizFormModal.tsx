@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import type { Quiz, QuizInput, QuizType } from '../../../lib/quizTypes'
-import { QUIZ_TYPE_EMOJI, QUIZ_TYPE_LABEL } from '../../../lib/quizTypes'
+import type {
+  MissionSubtype,
+  Quiz,
+  QuizInput,
+  QuizType,
+} from '../../../lib/quizTypes'
+import {
+  MISSION_SUBTYPE_EMOJI,
+  MISSION_SUBTYPE_LABEL,
+  QUIZ_TYPE_EMOJI,
+  QUIZ_TYPE_LABEL,
+} from '../../../lib/quizTypes'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -12,10 +22,12 @@ interface Props {
 }
 
 const TYPES: QuizType[] = ['text', 'choice', 'mission']
+const MISSION_SUBTYPES: MissionSubtype[] = ['video', 'photo', 'verify']
 
 interface FormState {
   order_num: number
   type: QuizType
+  missionSubtype: MissionSubtype
   question: string
   location_hint: string
   choices: [string, string, string, string]
@@ -41,6 +53,7 @@ function makeInitial(props: Props): FormState {
     return {
       order_num: q.order_num,
       type: q.type,
+      missionSubtype: q.mission_subtype ?? 'verify',
       question: q.question,
       location_hint: q.location_hint ?? '',
       choices: padded,
@@ -54,6 +67,7 @@ function makeInitial(props: Props): FormState {
   return {
     order_num: props.nextOrderNum,
     type: 'text',
+    missionSubtype: 'verify',
     question: '',
     location_hint: '',
     choices: ['', '', '', ''],
@@ -135,6 +149,7 @@ export default function QuizFormModal(props: Props) {
     const payload: QuizInput = {
       order_num: form.order_num,
       type: form.type,
+      mission_subtype: form.type === 'mission' ? form.missionSubtype : null,
       question: form.question.trim(),
       location_hint: form.location_hint.trim() || null,
       choices: form.type === 'choice' ? form.choices.map((c) => c.trim()) : null,
@@ -235,6 +250,45 @@ export default function QuizFormModal(props: Props) {
               </div>
             </div>
           </div>
+
+          {/* 세부 유형 (현장 미션일 때만) */}
+          {form.type === 'mission' && (
+            <div>
+              <label className="text-xs font-bold text-text-dark">
+                현장 미션 세부 유형
+              </label>
+              <div className="mt-1 grid grid-cols-3 gap-2">
+                {MISSION_SUBTYPES.map((st) => {
+                  const active = form.missionSubtype === st
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => set('missionSubtype', st)}
+                      className={`px-2 py-2 rounded-xl text-xs font-bold border-2 transition-colors ${
+                        active
+                          ? 'border-orange-main bg-orange-main/10 text-orange-main'
+                          : 'border-text-dark/10 text-text-dark/60 hover:border-orange-main/40'
+                      }`}
+                    >
+                      <span aria-hidden className="mr-1">
+                        {MISSION_SUBTYPE_EMOJI[st]}
+                      </span>
+                      {MISSION_SUBTYPE_LABEL[st]}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1.5 text-[11px] text-text-dark/50">
+                {form.missionSubtype === 'video' &&
+                  '📹 참가자가 영상을 찍어 업로드해요'}
+                {form.missionSubtype === 'photo' &&
+                  '📷 참가자가 사진을 찍어 업로드해요'}
+                {form.missionSubtype === 'verify' &&
+                  '✋ 운영자가 현장에서 직접 확인해요 (업로드 없음)'}
+              </p>
+            </div>
+          )}
 
           {/* 문제 */}
           <div>

@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import type { Quiz } from '../lib/quizTypes'
-import { QUIZ_TYPE_EMOJI } from '../lib/quizTypes'
+import { MISSION_SUBTYPE_EMOJI, QUIZ_TYPE_EMOJI } from '../lib/quizTypes'
 
 const POLL_INTERVAL_MS = 5000
 const POLL_TIMEOUT_MS = 30 * 60 * 1000 // 30분
@@ -25,6 +25,8 @@ interface MissionRequestRow {
   status: 'pending' | 'approved' | 'rejected'
   processed_at: string | null
   note: string | null
+  media_url: string | null
+  media_type: 'video' | 'photo' | null
 }
 
 interface TeamRow {
@@ -79,6 +81,7 @@ export default function Result() {
   const [totalTeams, setTotalTeams] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
@@ -97,7 +100,9 @@ export default function Result() {
         supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
         supabase
           .from('tanggo_mission_requests')
-          .select('id, team_id, quiz_id, status, processed_at, note')
+          .select(
+            'id, team_id, quiz_id, status, processed_at, note, media_url, media_type',
+          )
           .eq('team_id', teamId),
         supabase
           .from('tanggo_teams')
@@ -132,7 +137,19 @@ export default function Result() {
 
     const rMap = new Map<string, MissionRequestRow>()
     for (const r of (requestsRes.data ?? []) as MissionRequestRow[]) {
-      rMap.set(r.quiz_id, r)
+      const prev = rMap.get(r.quiz_id)
+      // 승인된 요청 우선, 그 다음 최신 processed_at
+      const prevApproved = prev?.status === 'approved'
+      const curApproved = r.status === 'approved'
+      if (!prev) {
+        rMap.set(r.quiz_id, r)
+      } else if (curApproved && !prevApproved) {
+        rMap.set(r.quiz_id, r)
+      } else if (curApproved === prevApproved) {
+        const prevTs = prev.processed_at ?? ''
+        const curTs = r.processed_at ?? ''
+        if (curTs > prevTs) rMap.set(r.quiz_id, r)
+      }
     }
     setRequestsMap(rMap)
 
@@ -300,10 +317,33 @@ export default function Result() {
                       quiz={q}
                       answer={answersMap.get(q.id)}
                       missionRequest={requestsMap.get(q.id)}
+                      onOpenLightbox={(url) => setLightboxUrl(url)}
                     />
                   ))}
                 </div>
               </section>
+            )}
+
+            {/* 라이트박스 */}
+            {lightboxUrl && (
+              <div
+                className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
+                onClick={() => setLightboxUrl(null)}
+              >
+                <img
+                  src={lightboxUrl}
+                  alt="확대 보기"
+                  className="max-w-full max-h-full object-contain rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(null)}
+                  aria-label="닫기"
+                  className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center rounded-full bg-white/90 text-text-dark text-2xl"
+                >
+                  ×
+                </button>
+              </div>
             )}
 
             {/* 하단 */}
@@ -331,14 +371,20 @@ function MissionResultCard({
   quiz,
   answer,
   missionRequest,
+  onOpenLightbox,
 }: {
   quiz: Quiz
   answer: AnswerRow | undefined
   missionRequest: MissionRequestRow | undefined
+  onOpenLightbox: (url: string) => void
 }) {
   const correct = !!answer?.is_correct
   const rejected =
     quiz.type === 'mission' && missionRequest?.status === 'rejected'
+  const typeIcon =
+    quiz.type === 'mission' && quiz.mission_subtype
+      ? MISSION_SUBTYPE_EMOJI[quiz.mission_subtype]
+      : QUIZ_TYPE_EMOJI[quiz.type]
 
   let toneCls = 'border-text-dark/10 bg-white'
   let badge = (
@@ -368,7 +414,7 @@ function MissionResultCard({
         <p className="text-xs font-black text-orange-main tabular-nums">
           #{quiz.order_num}{' '}
           <span aria-hidden className="ml-0.5">
-            {QUIZ_TYPE_EMOJI[quiz.type]}
+            {typeIcon}
           </span>
         </p>
         {badge}
@@ -397,6 +443,36 @@ function MissionResultCard({
           "{missionRequest.note}"
         </p>
       )}
+
+      {/* 제출한 미디어 썸네일 */}
+      {quiz.type === 'mission' &&
+        missionRequest?.media_url &&
+        missionRequest.media_type === 'photo' && (
+          <button
+            type="button"
+            onClick={() => onOpenLightbox(missionRequest.media_url!)}
+            className="mt-2 block rounded-lg overflow-hidden bg-black cursor-zoom-in w-full"
+            aria-label="제출한 사진 확대 보기"
+          >
+            <img
+              src={missionRequest.media_url}
+              alt="제출한 사진"
+              loading="lazy"
+              className="w-full h-24 object-cover"
+            />
+          </button>
+        )}
+      {quiz.type === 'mission' &&
+        missionRequest?.media_url &&
+        missionRequest.media_type === 'video' && (
+          <video
+            src={missionRequest.media_url}
+            controls
+            playsInline
+            preload="metadata"
+            className="mt-2 w-full rounded-lg bg-black max-h-48 object-contain"
+          />
+        )}
     </div>
   )
 }

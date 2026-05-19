@@ -4,7 +4,17 @@ import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import type { Quiz } from '../lib/quizTypes'
-import { QUIZ_TYPE_EMOJI, QUIZ_TYPE_LABEL } from '../lib/quizTypes'
+import {
+  MISSION_SUBTYPE_EMOJI,
+  MISSION_SUBTYPE_LABEL,
+  QUIZ_TYPE_EMOJI,
+  QUIZ_TYPE_LABEL,
+} from '../lib/quizTypes'
+import {
+  MAX_MISSION_MEDIA_BYTES,
+  formatBytes,
+  uploadMissionMedia,
+} from '../lib/missionMedia'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -25,6 +35,8 @@ interface MissionRequestRow {
   requested_at: string
   processed_at: string | null
   note: string | null
+  media_url: string | null
+  media_type: 'video' | 'photo' | null
 }
 
 interface TeamRow {
@@ -329,7 +341,9 @@ export default function Mission() {
                       #{q.order_num}
                     </span>
                     <span className="text-base" aria-hidden>
-                      {QUIZ_TYPE_EMOJI[q.type]}
+                      {q.type === 'mission' && q.mission_subtype
+                        ? MISSION_SUBTYPE_EMOJI[q.mission_subtype]
+                        : QUIZ_TYPE_EMOJI[q.type]}
                     </span>
                   </div>
                   {q.location_hint && (
@@ -416,6 +430,19 @@ function QuizSolveModal({
   const [submitting, setSubmitting] = useState(false)
   const [showHint, setShowHint] = useState(hintAlreadySeen)
   const [error, setError] = useState<string | null>(null)
+  const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const missionSubtype = quiz.type === 'mission' ? quiz.mission_subtype : null
+  const isUploadKind = missionSubtype === 'video' || missionSubtype === 'photo'
+
+  useEffect(() => {
+    return () => {
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
+    }
+  }, [mediaPreviewUrl])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -489,14 +516,69 @@ function QuizSolveModal({
     }
   }
 
-  async function handleMissionRequest() {
-    if (submitting || solved || isAwaiting) return
-    setSubmitting(true)
+  function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (f.size > MAX_MISSION_MEDIA_BYTES) {
+      setError(
+        `파일이 너무 커요 (${formatBytes(f.size)}). 50MB 이하로 올려주세요.`,
+      )
+      e.target.value = ''
+      return
+    }
     setError(null)
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
+    setMediaFile(f)
+    setMediaPreviewUrl(URL.createObjectURL(f))
+  }
+
+  function clearMedia() {
+    if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl)
+    setMediaFile(null)
+    setMediaPreviewUrl(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function handleMissionRequest() {
+    if (submitting || uploading || solved || isAwaiting) return
+    setError(null)
+
+    let mediaUrl: string | null = null
+    let mediaType: 'video' | 'photo' | null = null
+
+    if (isUploadKind) {
+      if (!mediaFile) {
+        setError(
+          missionSubtype === 'video'
+            ? '영상을 선택해주세요'
+            : '사진을 선택해주세요',
+        )
+        return
+      }
+      setUploading(true)
+      try {
+        const res = await uploadMissionMedia(mediaFile, teamId, quiz.id)
+        mediaUrl = res.url
+        mediaType = missionSubtype as 'video' | 'photo'
+      } catch (e) {
+        setError(
+          `업로드 실패. 다시 시도해주세요${
+            e instanceof Error ? ` (${e.message})` : ''
+          }`,
+        )
+        setUploading(false)
+        return
+      }
+      setUploading(false)
+    }
+
+    setSubmitting(true)
     const { error } = await supabase.from('tanggo_mission_requests').insert({
       team_id: teamId,
       quiz_id: quiz.id,
       status: 'pending',
+      media_url: mediaUrl,
+      media_type: mediaType,
     })
     if (error) {
       setError(error.message)
@@ -538,9 +620,13 @@ function QuizSolveModal({
           <div>
             <p className="text-xs font-bold text-text-dark/50">
               <span aria-hidden className="mr-1">
-                {QUIZ_TYPE_EMOJI[quiz.type]}
+                {missionSubtype
+                  ? MISSION_SUBTYPE_EMOJI[missionSubtype]
+                  : QUIZ_TYPE_EMOJI[quiz.type]}
               </span>
-              {QUIZ_TYPE_LABEL[quiz.type]}
+              {missionSubtype
+                ? `${MISSION_SUBTYPE_LABEL[missionSubtype]} 미션`
+                : QUIZ_TYPE_LABEL[quiz.type]}
             </p>
             <h2 className="text-lg font-black text-text-dark">
               미션 <span className="text-orange-main tabular-nums">#{quiz.order_num}</span>
@@ -661,13 +747,100 @@ function QuizSolveModal({
                 </div>
               )}
 
-              {quiz.type === 'mission' && (
+              {quiz.type === 'mission' && missionSubtype === 'verify' && (
                 <div className="mt-5 p-4 rounded-2xl bg-cream">
                   <p className="text-sm text-text-dark/70 leading-relaxed">
-                    운영자에게 미션 수행 결과를 보여주고 승인을 받으세요.
+                    ✋ 운영자에게 직접 보여주고 인증받으세요.
                     <br />
                     아래 버튼으로 완료 요청을 보낼 수 있어요.
                   </p>
+                </div>
+              )}
+
+              {quiz.type === 'mission' && isUploadKind && (
+                <div className="mt-5">
+                  <p className="text-sm font-bold text-text-dark mb-2">
+                    {missionSubtype === 'video'
+                      ? '📹 영상을 찍어 올려주세요'
+                      : '📷 사진을 찍어 올려주세요'}
+                  </p>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept={missionSubtype === 'video' ? 'video/*' : 'image/*'}
+                    capture="environment"
+                    className="hidden"
+                    onChange={onFilePicked}
+                  />
+
+                  {!mediaFile ? (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="w-full py-4 rounded-2xl border-2 border-dashed border-orange-main/50 bg-orange-main/5 text-orange-main text-sm font-bold hover:bg-orange-main/10 active:scale-[0.99] transition-all"
+                    >
+                      {missionSubtype === 'video'
+                        ? '📷 영상 찍기 / 갤러리에서 선택'
+                        : '📷 사진 찍기 / 갤러리에서 선택'}
+                    </button>
+                  ) : (
+                    <div className="rounded-2xl bg-cream p-3">
+                      {missionSubtype === 'video' && mediaPreviewUrl && (
+                        <video
+                          src={mediaPreviewUrl}
+                          controls
+                          playsInline
+                          className="w-full rounded-xl bg-black max-h-72 object-contain"
+                        />
+                      )}
+                      {missionSubtype === 'photo' && mediaPreviewUrl && (
+                        <img
+                          src={mediaPreviewUrl}
+                          alt="선택한 사진 미리보기"
+                          className="w-full rounded-xl bg-black max-h-72 object-contain"
+                        />
+                      )}
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-text-dark truncate">
+                            {mediaFile.name}
+                          </p>
+                          <p className="text-[11px] text-text-dark/60 tabular-nums">
+                            {formatBytes(mediaFile.size)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={clearMedia}
+                          disabled={uploading}
+                          className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border border-text-dark/15 hover:bg-white text-text-dark/70 disabled:opacity-50"
+                        >
+                          다시 선택
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {uploading && (
+                    <div className="mt-3 p-3 rounded-xl bg-orange-main/10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full border-2 border-orange-main border-t-transparent animate-spin" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-orange-main">
+                            업로드 중...
+                          </p>
+                          <p className="text-[11px] text-text-dark/60">
+                            잠시만 기다려주세요. 화면을 닫지 마세요.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 h-1.5 rounded-full bg-orange-main/20 overflow-hidden">
+                        <div className="h-full w-full bg-orange-main animate-pulse" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -737,14 +910,26 @@ function QuizSolveModal({
               <button
                 type="button"
                 onClick={handleMissionRequest}
-                disabled={submitting}
+                disabled={
+                  submitting ||
+                  uploading ||
+                  (isUploadKind && !mediaFile)
+                }
                 className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  submitting
+                  submitting ||
+                  uploading ||
+                  (isUploadKind && !mediaFile)
                     ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
                     : 'bg-orange-main text-white hover:bg-orange-sub'
                 }`}
               >
-                {submitting ? '요청 중...' : '📡 완료 요청 보내기'}
+                {uploading
+                  ? '업로드 중...'
+                  : submitting
+                    ? '요청 중...'
+                    : isUploadKind
+                      ? '📡 업로드 후 제출'
+                      : '📡 완료 요청 보내기'}
               </button>
             )}
           </div>
