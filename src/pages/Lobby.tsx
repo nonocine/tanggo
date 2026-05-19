@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
+import { useText } from '../lib/useTextContent'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 
 const POLL_INTERVAL_MS = 5000
@@ -214,6 +215,10 @@ function WaitingBlock({
   team: TeamRow
   eventStartAt: string | null
 }) {
+  const waitingMessage = useText(
+    'lobby_waiting_message',
+    '운영자의 신호를 기다려주세요',
+  )
   return (
     <>
       <section
@@ -245,8 +250,8 @@ function WaitingBlock({
         <p className="text-base font-bold text-text-dark">
           행사 시작을 기다리고 있어요
         </p>
-        <p className="mt-1 text-sm text-text-dark/60">
-          운영자의 신호를 기다려주세요
+        <p className="mt-1 text-sm text-text-dark/60 whitespace-pre-line">
+          {waitingMessage}
         </p>
 
         {eventStartAt && (
@@ -322,6 +327,7 @@ function CountdownBlock({
 }
 
 function GoBlock({ teamName, onGo }: { teamName: string; onGo: () => void }) {
+  const goMessage = useText('lobby_go_message', '지금부터 미션 시작이에요 🚀')
   return (
     <section
       className="relative rounded-3xl border-4 border-orange-main bg-white px-6 pt-10 pb-8 text-center"
@@ -334,8 +340,8 @@ function GoBlock({ teamName, onGo }: { teamName: string; onGo: () => void }) {
         <p className="text-8xl font-black text-orange-main animate-bounce">GO!</p>
       </div>
 
-      <p className="text-base font-bold text-text-dark">
-        지금부터 미션 시작이에요 🚀
+      <p className="text-base font-bold text-text-dark whitespace-pre-line">
+        {goMessage}
       </p>
       <p className="mt-1 text-sm text-text-dark/60">
         잠시 후 미션 화면으로 이동합니다...

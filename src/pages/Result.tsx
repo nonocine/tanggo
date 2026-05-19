@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
+import { useText } from '../lib/useTextContent'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import type { Quiz } from '../lib/quizTypes'
 import { MISSION_SUBTYPE_EMOJI, QUIZ_TYPE_EMOJI } from '../lib/quizTypes'
@@ -84,6 +85,16 @@ export default function Result() {
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [surveyAvailable, setSurveyAvailable] = useState(false)
   const [mySurveyResponded, setMySurveyResponded] = useState(false)
+
+  const congratsTitle = useText('result_congrats_title', '🏁 미션 완료!')
+  const surveyInviteTitle = useText(
+    'result_survey_invite',
+    '만족도 조사에 참여해주세요!',
+  )
+  const surveyInviteSubtext = useText(
+    'result_survey_subtext',
+    '1분이면 끝나요. 여러분의 의견이 다음 행사를 더 재밌게 만들어요.',
+  )
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
@@ -247,7 +258,9 @@ export default function Result() {
       <AnnouncementBanner />
 
       <header className="px-4 pt-5 text-center">
-        <p className="text-sm font-bold text-text-dark/60">🏁 미션 완료!</p>
+        <p className="text-sm font-bold text-text-dark/60 whitespace-pre-line">
+          {congratsTitle}
+        </p>
         <h1 className="mt-1 text-2xl font-black text-text-dark">
           {teamName ?? team?.team_name ?? '???'}
         </h1>
@@ -417,12 +430,11 @@ export default function Result() {
                         🎁
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-base font-black text-[#8a6f00]">
-                          만족도 조사에 참여해주세요!
+                        <p className="text-base font-black text-[#8a6f00] whitespace-pre-line">
+                          {surveyInviteTitle}
                         </p>
-                        <p className="mt-0.5 text-xs text-text-dark/70">
-                          1분이면 끝나요. 여러분의 의견이 다음 행사를 더 재밌게
-                          만들어요.
+                        <p className="mt-0.5 text-xs text-text-dark/70 whitespace-pre-line">
+                          {surveyInviteSubtext}
                         </p>
                       </div>
                       <span className="text-xl text-[#8a6f00]" aria-hidden>

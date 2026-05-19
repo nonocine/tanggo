@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
+import { useText } from '../lib/useTextContent'
 import type {
   SurveyQuestion,
   SurveyResponse,
@@ -105,6 +106,12 @@ export default function Survey() {
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const respondentName = memberName?.trim() || null
+
+  const thanksTitle = useText('survey_thanks_title', '참여해주셔서 감사합니다!')
+  const thanksBody = useText(
+    'survey_thanks_body',
+    '여러분의 의견이 다음 행사를 더 재밌게 만들어요.',
+  )
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
@@ -213,11 +220,11 @@ export default function Survey() {
         <div className="text-7xl mb-4" aria-hidden>
           🎉
         </div>
-        <h1 className="text-2xl font-black text-orange-main">
-          참여해주셔서 감사합니다!
+        <h1 className="text-2xl font-black text-orange-main whitespace-pre-line">
+          {thanksTitle}
         </h1>
-        <p className="mt-2 text-sm text-text-dark/70">
-          여러분의 의견이 다음 행사를 더 재밌게 만들어요.
+        <p className="mt-2 text-sm text-text-dark/70 whitespace-pre-line">
+          {thanksBody}
         </p>
         <div className="mt-8 flex flex-col gap-2 w-full max-w-xs">
           <button

@@ -1,11 +1,17 @@
 import { useNavigate } from 'react-router-dom'
 import { APP_CONFIG } from '../config/appConfig'
 import { SEASON_CONFIG } from '../config/seasonConfig'
+import { useText } from '../lib/useTextContent'
 import MainTitle from '../components/MainTitle'
 import SeasonTitle from '../components/SeasonTitle'
 
 export default function Landing() {
   const navigate = useNavigate()
+  const welcomeTitle = useText('landing_welcome_title', '🎯 미션 안내')
+  const welcomeBody = useText(
+    'landing_welcome_body',
+    '팀을 만들어 학교 곳곳에 숨겨진 미션을 찾고\n가장 빠르게 풀어 1등을 차지하세요!',
+  )
 
   const footerText = `${APP_CONFIG.appName} · ${SEASON_CONFIG.seasonName} · ${APP_CONFIG.appOrganizer}`
 
@@ -59,16 +65,9 @@ export default function Landing() {
             <div className="w-3 h-2 -mt-0.5 rounded-b-sm bg-gray-400" />
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xl" aria-hidden>
-              🎯
-            </span>
-            <h2 className="text-lg font-bold text-text-dark">미션 안내</h2>
-          </div>
-          <p className="mt-3 text-[15px] leading-relaxed text-text-dark/75">
-            팀을 만들어 학교 곳곳에 숨겨진 미션을 찾고
-            <br />
-            가장 빠르게 풀어 1등을 차지하세요!
+          <h2 className="text-lg font-bold text-text-dark">{welcomeTitle}</h2>
+          <p className="mt-3 text-[15px] leading-relaxed text-text-dark/75 whitespace-pre-line">
+            {welcomeBody}
           </p>
 
           <ul className="mt-5 flex flex-wrap gap-2">

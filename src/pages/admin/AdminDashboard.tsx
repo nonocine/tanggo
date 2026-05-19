@@ -10,6 +10,7 @@ import MissionApproval from './tabs/MissionApproval'
 import SurveyManager from './tabs/SurveyManager'
 import ReportManager from './tabs/ReportManager'
 import DataManager from './tabs/DataManager'
+import TextManager from './tabs/TextManager'
 
 type TabKey =
   | 'quiz'
@@ -18,6 +19,7 @@ type TabKey =
   | 'approvals'
   | 'results'
   | 'settings'
+  | 'text'
   | 'survey'
   | 'reports'
   | 'data'
@@ -36,6 +38,7 @@ const TABS: TabDef[] = [
   { key: 'approvals', icon: '✋', label: '미션 승인', shortLabel: '승인' },
   { key: 'results', icon: '🏆', label: '순위/결과' },
   { key: 'settings', icon: '⚙', label: '행사 설정', shortLabel: '설정' },
+  { key: 'text', icon: '💬', label: '문구 관리' },
   { key: 'survey', icon: '📝', label: '설문 관리' },
   { key: 'reports', icon: '📊', label: '보고서' },
   { key: 'data', icon: '🗑', label: '데이터 관리' },
@@ -154,6 +157,7 @@ export default function AdminDashboard() {
           {currentTab === 'progress' && <GameProgress />}
           {currentTab === 'settings' && <EventSettings />}
           {currentTab === 'approvals' && <MissionApproval />}
+          {currentTab === 'text' && <TextManager />}
           {currentTab === 'survey' && <SurveyManager />}
           {currentTab === 'reports' && <ReportManager />}
           {currentTab === 'data' && <DataManager />}
@@ -162,6 +166,7 @@ export default function AdminDashboard() {
             currentTab !== 'progress' &&
             currentTab !== 'settings' &&
             currentTab !== 'approvals' &&
+            currentTab !== 'text' &&
             currentTab !== 'survey' &&
             currentTab !== 'reports' &&
             currentTab !== 'data' && <Placeholder label={activeLabel} />}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { initTextContents } from './lib/useTextContent'
 import SplashScreen from './components/SplashScreen'
 import AdminProtected from './components/AdminProtected'
 import OperatorProtected from './components/OperatorProtected'
@@ -36,6 +37,10 @@ function SplashThenLanding() {
 }
 
 function App() {
+  useEffect(() => {
+    initTextContents()
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>
