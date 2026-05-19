@@ -1,13 +1,19 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { SEASON_CONFIG } from '../../config/seasonConfig'
-
-const ADMIN_AUTH_KEY = 'tanggo_admin_auth'
+import { ADMIN_AUTH_KEY } from '../../components/AdminProtected'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const alreadyAuthed =
+    typeof window !== 'undefined' &&
+    localStorage.getItem(ADMIN_AUTH_KEY) === 'true'
+  if (alreadyAuthed) {
+    return <Navigate to="/admin/dashboard" replace />
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

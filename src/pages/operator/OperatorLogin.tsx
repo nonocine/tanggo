@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { SEASON_CONFIG } from '../../config/seasonConfig'
 import { OPERATOR_AUTH_KEY } from '../../components/OperatorProtected'
 
@@ -9,6 +9,13 @@ export default function OperatorLogin() {
   const navigate = useNavigate()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const alreadyAuthed =
+    typeof window !== 'undefined' &&
+    localStorage.getItem(OPERATOR_AUTH_KEY) === 'true'
+  if (alreadyAuthed) {
+    return <Navigate to="/operator/dashboard" replace />
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
