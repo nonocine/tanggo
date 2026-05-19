@@ -10,6 +10,7 @@ import TeamJoin from './pages/TeamJoin'
 import Lobby from './pages/Lobby'
 import Mission from './pages/Mission'
 import Result from './pages/Result'
+import Survey from './pages/Survey'
 import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import OperatorLogin from './pages/operator/OperatorLogin'
@@ -62,6 +63,14 @@ function App() {
           element={
             <ParticipantGate>
               <Result />
+            </ParticipantGate>
+          }
+        />
+        <Route
+          path="/survey"
+          element={
+            <ParticipantGate>
+              <Survey />
             </ParticipantGate>
           }
         />

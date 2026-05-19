@@ -82,6 +82,8 @@ export default function Result() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [surveyAvailable, setSurveyAvailable] = useState(false)
+  const [mySurveyResponded, setMySurveyResponded] = useState(false)
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
@@ -192,6 +194,38 @@ export default function Result() {
       clearTimeout(stop)
     }
   }, [fetchAll])
+
+  // 설문 응답 상태 (한 번만)
+  useEffect(() => {
+    if (!teamId) return
+    let cancelled = false
+    ;(async () => {
+      const respondent = memberName?.trim() || null
+      const [qRes, rRes] = await Promise.all([
+        supabase
+          .from('tanggo_survey_questions')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_active', true),
+        respondent
+          ? supabase
+              .from('tanggo_survey_responses')
+              .select('id', { count: 'exact', head: true })
+              .eq('team_id', teamId)
+              .eq('respondent_name', respondent)
+          : supabase
+              .from('tanggo_survey_responses')
+              .select('id', { count: 'exact', head: true })
+              .eq('team_id', teamId)
+              .is('respondent_name', null),
+      ])
+      if (cancelled) return
+      setSurveyAvailable((qRes.count ?? 0) > 0)
+      setMySurveyResponded((rRes.count ?? 0) > 0)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [teamId, memberName])
 
   const correctCount = useMemo(() => {
     let c = 0
@@ -344,6 +378,60 @@ export default function Result() {
                   ×
                 </button>
               </div>
+            )}
+
+            {/* 설문 진입 카드 */}
+            {surveyAvailable && (
+              <section className="mt-6">
+                {mySurveyResponded ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/survey')}
+                    className="w-full rounded-2xl border-2 border-mint/40 bg-mint/10 px-5 py-4 text-left hover:bg-mint/15 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl" aria-hidden>
+                        ✅
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[#2C7846]">
+                          설문 참여 완료
+                        </p>
+                        <p className="text-xs text-text-dark/60">
+                          응답을 다시 보거나 수정할 수 있어요
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/survey')}
+                    className="w-full rounded-2xl border-2 border-yellow-accent bg-yellow-accent/15 px-5 py-5 text-left hover:bg-yellow-accent/25 active:scale-[0.99] transition-all"
+                    style={{
+                      boxShadow: '0 8px 18px -8px rgba(218, 165, 32, 0.4)',
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl" aria-hidden>
+                        🎁
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-black text-[#8a6f00]">
+                          만족도 조사에 참여해주세요!
+                        </p>
+                        <p className="mt-0.5 text-xs text-text-dark/70">
+                          1분이면 끝나요. 여러분의 의견이 다음 행사를 더 재밌게
+                          만들어요.
+                        </p>
+                      </div>
+                      <span className="text-xl text-[#8a6f00]" aria-hidden>
+                        ›
+                      </span>
+                    </div>
+                  </button>
+                )}
+              </section>
             )}
 
             {/* 하단 */}

@@ -7,6 +7,8 @@ import TeamManager from './tabs/TeamManager'
 import GameProgress from './tabs/GameProgress'
 import EventSettings from './tabs/EventSettings'
 import MissionApproval from './tabs/MissionApproval'
+import SurveyManager from './tabs/SurveyManager'
+import ReportManager from './tabs/ReportManager'
 
 type TabKey =
   | 'quiz'
@@ -15,6 +17,7 @@ type TabKey =
   | 'approvals'
   | 'results'
   | 'settings'
+  | 'survey'
   | 'reports'
   | 'data'
 
@@ -32,6 +35,7 @@ const TABS: TabDef[] = [
   { key: 'approvals', icon: '✋', label: '미션 승인', shortLabel: '승인' },
   { key: 'results', icon: '🏆', label: '순위/결과' },
   { key: 'settings', icon: '⚙', label: '행사 설정', shortLabel: '설정' },
+  { key: 'survey', icon: '📝', label: '설문 관리' },
   { key: 'reports', icon: '📊', label: '보고서' },
   { key: 'data', icon: '🗑', label: '데이터 관리' },
 ]
@@ -149,11 +153,15 @@ export default function AdminDashboard() {
           {currentTab === 'progress' && <GameProgress />}
           {currentTab === 'settings' && <EventSettings />}
           {currentTab === 'approvals' && <MissionApproval />}
+          {currentTab === 'survey' && <SurveyManager />}
+          {currentTab === 'reports' && <ReportManager />}
           {currentTab !== 'quiz' &&
             currentTab !== 'teams' &&
             currentTab !== 'progress' &&
             currentTab !== 'settings' &&
-            currentTab !== 'approvals' && <Placeholder label={activeLabel} />}
+            currentTab !== 'approvals' &&
+            currentTab !== 'survey' &&
+            currentTab !== 'reports' && <Placeholder label={activeLabel} />}
         </main>
       </div>
 
