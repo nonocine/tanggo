@@ -9,6 +9,7 @@ import EventSettings from './tabs/EventSettings'
 import MissionApproval from './tabs/MissionApproval'
 import SurveyManager from './tabs/SurveyManager'
 import ReportManager from './tabs/ReportManager'
+import DataManager from './tabs/DataManager'
 
 type TabKey =
   | 'quiz'
@@ -155,13 +156,15 @@ export default function AdminDashboard() {
           {currentTab === 'approvals' && <MissionApproval />}
           {currentTab === 'survey' && <SurveyManager />}
           {currentTab === 'reports' && <ReportManager />}
+          {currentTab === 'data' && <DataManager />}
           {currentTab !== 'quiz' &&
             currentTab !== 'teams' &&
             currentTab !== 'progress' &&
             currentTab !== 'settings' &&
             currentTab !== 'approvals' &&
             currentTab !== 'survey' &&
-            currentTab !== 'reports' && <Placeholder label={activeLabel} />}
+            currentTab !== 'reports' &&
+            currentTab !== 'data' && <Placeholder label={activeLabel} />}
         </main>
       </div>
 
