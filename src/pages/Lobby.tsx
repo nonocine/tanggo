@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
@@ -19,9 +19,10 @@ interface TeamRow {
 
 interface EventConfigRow {
   event_start_at: string | null
-  start_interval_seconds: number
   service_ended: boolean
 }
+
+const GO_DURATION_MS = 3000
 
 type LobbyState =
   | { kind: 'loading' }
@@ -29,9 +30,11 @@ type LobbyState =
   | { kind: 'go_to_result' }
   | { kind: 'go_to_mission' }
   | { kind: 'waiting' }
-  | { kind: 'countdown'; secondsLeft: number; ourStartAt: number }
-  | { kind: 'go' }
+  | { kind: 'go'; secondsLeft: number }
 
+// 단순화된 상태 머신:
+// 관리자가 [행사 시작]을 누르면 모든 팀의 started_at 이 한꺼번에 설정된다.
+// 그 전까지는 무조건 대기. started_at 이 생기면 GO 카운트다운 후 미션으로 이동.
 function computeState(
   team: TeamRow | null,
   config: EventConfigRow | null,
@@ -40,35 +43,23 @@ function computeState(
   if (!team || !config) return { kind: 'loading' }
   if (config.service_ended) return { kind: 'service_ended' }
   if (team.finished_at) return { kind: 'go_to_result' }
-  if (team.started_at) return { kind: 'go_to_mission' }
-  if (!config.event_start_at) return { kind: 'waiting' }
+  if (!team.started_at) return { kind: 'waiting' }
 
-  const startMs = new Date(config.event_start_at).getTime()
-  if (Number.isNaN(startMs) || now < startMs) return { kind: 'waiting' }
+  const startedMs = new Date(team.started_at).getTime()
+  if (Number.isNaN(startedMs)) return { kind: 'go_to_mission' }
 
-  const offsetSec = ((team.start_order ?? 1) - 1) * config.start_interval_seconds
-  const ourStartMs = startMs + offsetSec * 1000
-
-  if (now < ourStartMs) {
+  const elapsed = now - startedMs
+  if (elapsed < GO_DURATION_MS) {
     return {
-      kind: 'countdown',
-      secondsLeft: Math.ceil((ourStartMs - now) / 1000),
-      ourStartAt: ourStartMs,
+      kind: 'go',
+      secondsLeft: Math.max(1, Math.ceil((GO_DURATION_MS - elapsed) / 1000)),
     }
   }
-
-  return { kind: 'go' }
+  return { kind: 'go_to_mission' }
 }
 
 function pad(n: number): string {
   return String(n).padStart(2, '0')
-}
-
-function formatCountdown(secondsLeft: number): string {
-  const s = Math.max(0, secondsLeft)
-  const m = Math.floor(s / 60)
-  const sec = s % 60
-  return `${m}:${pad(sec)}`
 }
 
 function formatDateTime(iso: string | null): string {
@@ -86,7 +77,6 @@ export default function Lobby() {
   const [config, setConfig] = useState<EventConfigRow | null>(null)
   const [now, setNow] = useState(Date.now())
   const [error, setError] = useState<string | null>(null)
-  const startingRef = useRef(false)
 
   const fetchData = useCallback(async () => {
     if (!teamId) return
@@ -100,7 +90,7 @@ export default function Lobby() {
         .maybeSingle(),
       supabase
         .from('tanggo_event_config')
-        .select('event_start_at, start_interval_seconds, service_ended')
+        .select('event_start_at, service_ended')
         .eq('id', 1)
         .maybeSingle(),
     ])
@@ -135,33 +125,7 @@ export default function Lobby() {
     }
   }, [state.kind, navigate])
 
-  // 우리 팀 차례 도래 시 자동으로 started_at 설정 + 3초 후 /mission
-  useEffect(() => {
-    if (state.kind !== 'go') return
-    if (!team || team.started_at || startingRef.current) return
-    startingRef.current = true
-
-    const nowIso = new Date().toISOString()
-    supabase
-      .from('tanggo_teams')
-      .update({ started_at: nowIso })
-      .eq('id', team.id)
-      .then(() => {
-        fetchData()
-      })
-
-    const t = setTimeout(() => navigate('/mission', { replace: true }), 3000)
-    return () => clearTimeout(t)
-  }, [state.kind, team, fetchData, navigate])
-
-  async function goNow() {
-    if (!team) return
-    if (!team.started_at) {
-      await supabase
-        .from('tanggo_teams')
-        .update({ started_at: new Date().toISOString() })
-        .eq('id', team.id)
-    }
+  function goNow() {
     navigate('/mission', { replace: true })
   }
 
@@ -194,11 +158,10 @@ export default function Lobby() {
         ) : state.kind === 'service_ended' ? (
           <ServiceEndedBlock />
         ) : state.kind === 'go' ? (
-          <GoBlock teamName={teamName ?? team?.team_name ?? '???'} onGo={goNow} />
-        ) : state.kind === 'countdown' ? (
-          <CountdownBlock
+          <GoBlock
+            teamName={teamName ?? team?.team_name ?? '???'}
             secondsLeft={state.secondsLeft}
-            startOrder={team?.start_order ?? null}
+            onGo={goNow}
           />
         ) : (
           <WaitingBlock team={team!} eventStartAt={config?.event_start_at ?? null} />
@@ -253,9 +216,12 @@ function WaitingBlock({
         <p className="mt-1 text-sm text-text-dark/60 whitespace-pre-line">
           {waitingMessage}
         </p>
+        <p className="mt-3 text-xs font-semibold text-text-dark/45">
+          🔔 운영자가 행사를 시작하면 미션이 자동으로 열려요
+        </p>
 
         {eventStartAt && (
-          <p className="mt-4 text-xs text-text-dark/50">
+          <p className="mt-3 text-xs text-text-dark/50">
             예정 시작: <span className="tabular-nums">{formatDateTime(eventStartAt)}</span>
           </p>
         )}
@@ -280,53 +246,15 @@ function WaitingBlock({
   )
 }
 
-function CountdownBlock({
+function GoBlock({
+  teamName,
   secondsLeft,
-  startOrder,
+  onGo,
 }: {
+  teamName: string
   secondsLeft: number
-  startOrder: number | null
+  onGo: () => void
 }) {
-  return (
-    <section
-      className="relative rounded-3xl border-4 border-mint bg-white px-6 pt-10 pb-8 text-center"
-      style={{ boxShadow: '0 10px 25px -5px rgba(134, 227, 161, 0.25)' }}
-    >
-      <div
-        aria-hidden
-        className="absolute -top-4 left-1/2 -translate-x-1/2 flex flex-col items-center"
-      >
-        <div className="w-24 h-6 rounded-lg bg-gradient-to-b from-gray-300 to-gray-400 shadow-md" />
-        <div className="w-3 h-2 -mt-0.5 rounded-b-sm bg-gray-400" />
-      </div>
-
-      <p className="text-sm font-bold text-text-dark/60">⏱ 출발 순서 대기</p>
-      <p className="mt-1 text-sm font-bold text-text-dark">
-        출발 순서:{' '}
-        <span className="text-orange-main tabular-nums">{startOrder ?? '?'}</span>
-        {startOrder != null && '등'}
-      </p>
-
-      <div className="my-8">
-        <p className="text-xs font-bold text-text-dark/50 uppercase tracking-wider">
-          다음 차례까지
-        </p>
-        <p className="mt-2 text-7xl font-black text-mint tabular-nums">
-          {formatCountdown(secondsLeft)}
-        </p>
-      </div>
-
-      <p className="text-base font-bold text-text-dark">
-        우리 팀 차례를 기다리는 중입니다
-      </p>
-      <p className="mt-1 text-sm text-text-dark/60">
-        조금만 더 기다려주세요 🚀
-      </p>
-    </section>
-  )
-}
-
-function GoBlock({ teamName, onGo }: { teamName: string; onGo: () => void }) {
   const goMessage = useText('lobby_go_message', '지금부터 미션 시작이에요 🚀')
   return (
     <section
@@ -338,6 +266,9 @@ function GoBlock({ teamName, onGo }: { teamName: string; onGo: () => void }) {
 
       <div className="my-8">
         <p className="text-8xl font-black text-orange-main animate-bounce">GO!</p>
+        <p className="mt-2 text-sm font-bold text-text-dark/50 tabular-nums">
+          {secondsLeft}초 후 미션 시작
+        </p>
       </div>
 
       <p className="text-base font-bold text-text-dark whitespace-pre-line">

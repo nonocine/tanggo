@@ -232,14 +232,25 @@ export default function EventSettings() {
     if (!ok) return
     setSavingSection('control')
     const nowIso = new Date().toISOString()
-    const { error } = await supabase
-      .from('tanggo_teams')
-      .update({ started_at: nowIso })
-      .is('started_at', null)
-    if (error) {
-      setToast(`행사 시작 실패: ${error.message}`)
+    // event_start_at 기록 + 대기 중인 모든 팀의 started_at 일괄 설정.
+    // 대기실(Lobby)은 started_at 이 생기면 자동으로 미션 화면으로 이동한다.
+    const [configRes, teamsRes] = await Promise.all([
+      supabase
+        .from('tanggo_event_config')
+        .update({ event_start_at: nowIso })
+        .eq('id', 1),
+      supabase
+        .from('tanggo_teams')
+        .update({ started_at: nowIso })
+        .is('started_at', null),
+    ])
+    if (configRes.error || teamsRes.error) {
+      setToast(
+        `행사 시작 실패: ${configRes.error?.message ?? teamsRes.error?.message}`,
+      )
     } else {
       setToast('🟢 행사를 시작했어요')
+      await fetchConfig(true)
     }
     setSavingSection(null)
   }

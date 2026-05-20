@@ -50,7 +50,7 @@ interface EventConfigRow {
   service_ended: boolean
 }
 
-type CardStatus = 'done' | 'awaiting' | 'rejected' | 'todo'
+type CardStatus = 'submitted' | 'awaiting' | 'todo'
 
 function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -77,31 +77,25 @@ function cardStatusOf(
   answer: AnswerRow | undefined,
   req: MissionRequestRow | undefined,
 ): CardStatus {
-  if (answer?.is_correct) return 'done'
   if (quiz.type === 'mission') {
     if (req?.status === 'pending') return 'awaiting'
-    if (req?.status === 'rejected') return 'rejected'
+    if (answer || req?.status === 'rejected') return 'submitted'
+    return 'todo'
   }
-  return 'todo'
+  return answer ? 'submitted' : 'todo'
 }
 
 function StatusBadge({ status }: { status: CardStatus }) {
-  if (status === 'done')
+  if (status === 'submitted')
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-mint/25 text-[#2C7846]">
-        ✅ 정답
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-text-dark/10 text-text-dark/60">
+        🔒 제출 완료
       </span>
     )
   if (status === 'awaiting')
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#F4C430]/20 text-[#A88300]">
         🕐 승인 대기
-      </span>
-    )
-  if (status === 'rejected')
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#E94B3C]/15 text-[#E94B3C]">
-        ❌ 거절됨
       </span>
     )
   return (
@@ -128,6 +122,7 @@ export default function Mission() {
   const [error, setError] = useState<string | null>(null)
   const [openQuiz, setOpenQuiz] = useState<Quiz | null>(null)
   const [celebrate, setCelebrate] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
   const finishingRef = useRef(false)
 
   const fetchAll = useCallback(async () => {
@@ -207,23 +202,38 @@ export default function Mission() {
     return () => clearInterval(t)
   }, [fetchAll])
 
-  const correctCount = useMemo(() => {
+  // 제출이 끝난(확정된) 미션 수 — 정답/오답과 무관.
+  // text/choice: 답안 제출됨 / mission: 승인(답안 생성) 또는 거절. 승인 대기는 미확정.
+  const finalizedCount = useMemo(() => {
     let c = 0
     for (const q of quizzes) {
-      if (answersMap.get(q.id)?.is_correct) c++
+      const ans = answersMap.get(q.id)
+      const req = requestsMap.get(q.id)
+      if (q.type === 'mission') {
+        if (ans || req?.status === 'rejected') c++
+      } else if (ans) {
+        c++
+      }
     }
     return c
-  }, [quizzes, answersMap])
+  }, [quizzes, answersMap, requestsMap])
 
   const total = quizzes.length
-  const progressPct = total === 0 ? 0 : Math.round((correctCount / total) * 100)
+  const progressPct = total === 0 ? 0 : Math.round((finalizedCount / total) * 100)
 
-  // 자동 완료 트리거
+  // 토스트 자동 해제
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2500)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // 자동 완료 트리거 — 모든 미션이 확정되면 결과로 이동
   useEffect(() => {
     if (finishingRef.current) return
     if (!team || team.finished_at) return
     if (total === 0) return
-    if (correctCount < total) return
+    if (finalizedCount < total) return
     finishingRef.current = true
     setCelebrate(true)
     supabase
@@ -233,7 +243,7 @@ export default function Mission() {
       .then(() => {
         setTimeout(() => navigate('/result', { replace: true }), 3000)
       })
-  }, [correctCount, total, team, navigate])
+  }, [finalizedCount, total, team, navigate])
 
   // service_ended 시 result 화면으로
   useEffect(() => {
@@ -278,7 +288,7 @@ export default function Mission() {
             🏷️ {teamName ?? team?.team_name ?? '???'} 팀
           </p>
           <p className="text-xs font-bold text-text-dark/70 tabular-nums">
-            <span className="text-orange-main">{correctCount}</span>
+            <span className="text-orange-main">{finalizedCount}</span>
             <span className="text-text-dark/40"> / {total}</span> 미션 완료
           </p>
         </div>
@@ -321,20 +331,18 @@ export default function Mission() {
               const ans = answersMap.get(q.id)
               const req = requestsMap.get(q.id)
               const status = cardStatusOf(q, ans, req)
-              const borderCls =
-                status === 'done'
-                  ? 'border-mint'
+              const skinCls =
+                status === 'submitted'
+                  ? 'border-text-dark/15 bg-text-dark/[0.04]'
                   : status === 'awaiting'
-                    ? 'border-[#F4C430]'
-                    : status === 'rejected'
-                      ? 'border-[#E94B3C]'
-                      : 'border-text-dark/10'
+                    ? 'border-[#F4C430] bg-white'
+                    : 'border-text-dark/10 bg-white'
               return (
                 <button
                   key={q.id}
                   type="button"
                   onClick={() => setOpenQuiz(q)}
-                  className={`text-left rounded-2xl border-2 bg-white p-3 hover:-translate-y-0.5 active:translate-y-0 transition-all ${borderCls}`}
+                  className={`text-left rounded-2xl border-2 p-3 hover:-translate-y-0.5 active:translate-y-0 transition-all ${skinCls}`}
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-sm font-black text-orange-main tabular-nums">
@@ -385,6 +393,10 @@ export default function Mission() {
           onChanged={() => {
             fetchAll()
           }}
+          onSubmitted={() => {
+            setToast('제출이 완료되었습니다 ✅')
+            fetchAll()
+          }}
         />
       )}
 
@@ -403,6 +415,15 @@ export default function Mission() {
           </div>
         </div>
       )}
+
+      {toast && (
+        <div
+          role="alert"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-xl bg-text-dark text-white text-sm font-semibold shadow-lg max-w-[90vw] text-center"
+        >
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -415,6 +436,7 @@ function QuizSolveModal({
   hintAlreadySeen,
   onClose,
   onChanged,
+  onSubmitted,
 }: {
   quiz: Quiz
   teamId: string
@@ -423,10 +445,10 @@ function QuizSolveModal({
   hintAlreadySeen: boolean
   onClose: () => void
   onChanged: () => void
+  onSubmitted: () => void
 }) {
   const [textAnswer, setTextAnswer] = useState('')
   const [choiceIdx, setChoiceIdx] = useState<number | null>(null)
-  const [wrongMsg, setWrongMsg] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showHint, setShowHint] = useState(hintAlreadySeen)
   const [error, setError] = useState<string | null>(null)
@@ -452,68 +474,53 @@ function QuizSolveModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const solved = !!answer?.is_correct
-  const isAwaiting = quiz.type === 'mission' && missionRequest?.status === 'pending'
-  const isRejected = quiz.type === 'mission' && missionRequest?.status === 'rejected'
+  const isMission = quiz.type === 'mission'
+  const missionPending = isMission && missionRequest?.status === 'pending'
+  // 한 번 제출하면 잠김 — 정답/오답 무관. mission은 거절도 확정으로 본다.
+  const locked = !!answer || (isMission && missionRequest?.status === 'rejected')
 
   async function handleTextSubmit() {
-    if (submitting || solved) return
+    if (submitting || locked || missionPending) return
     if (!textAnswer.trim()) return
     setSubmitting(true)
-    setWrongMsg(null)
     setError(null)
-    if (checkAnswer(quiz, textAnswer)) {
-      const { error } = await supabase.from('tanggo_answers').upsert(
-        {
-          team_id: teamId,
-          quiz_id: quiz.id,
-          submitted: textAnswer.trim(),
-          is_correct: true,
-          answered_at: new Date().toISOString(),
-        },
-        { onConflict: 'team_id,quiz_id' },
-      )
-      if (error) {
-        setError(error.message)
-        setSubmitting(false)
-        return
-      }
-      onChanged()
-      onClose()
-    } else {
-      setWrongMsg('다시 시도해보세요! 🤔')
+    const isCorrect = checkAnswer(quiz, textAnswer)
+    const { error } = await supabase.from('tanggo_answers').insert({
+      team_id: teamId,
+      quiz_id: quiz.id,
+      submitted: textAnswer.trim(),
+      is_correct: isCorrect,
+      answered_at: new Date().toISOString(),
+    })
+    if (error) {
+      setError(error.message)
       setSubmitting(false)
+      return
     }
+    onSubmitted()
+    onClose()
   }
 
   async function handleChoiceSubmit() {
-    if (submitting || solved || choiceIdx === null) return
+    if (submitting || locked || missionPending || choiceIdx === null) return
     setSubmitting(true)
-    setWrongMsg(null)
     setError(null)
     const submitted = String(choiceIdx + 1)
-    if (checkAnswer(quiz, submitted)) {
-      const { error } = await supabase.from('tanggo_answers').upsert(
-        {
-          team_id: teamId,
-          quiz_id: quiz.id,
-          submitted,
-          is_correct: true,
-          answered_at: new Date().toISOString(),
-        },
-        { onConflict: 'team_id,quiz_id' },
-      )
-      if (error) {
-        setError(error.message)
-        setSubmitting(false)
-        return
-      }
-      onChanged()
-      onClose()
-    } else {
-      setWrongMsg('다시 시도해보세요! 🤔')
+    const isCorrect = checkAnswer(quiz, submitted)
+    const { error } = await supabase.from('tanggo_answers').insert({
+      team_id: teamId,
+      quiz_id: quiz.id,
+      submitted,
+      is_correct: isCorrect,
+      answered_at: new Date().toISOString(),
+    })
+    if (error) {
+      setError(error.message)
       setSubmitting(false)
+      return
     }
+    onSubmitted()
+    onClose()
   }
 
   function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
@@ -540,7 +547,7 @@ function QuizSolveModal({
   }
 
   async function handleMissionRequest() {
-    if (submitting || uploading || solved || isAwaiting) return
+    if (submitting || uploading || locked || missionPending) return
     setError(null)
 
     let mediaUrl: string | null = null
@@ -585,7 +592,7 @@ function QuizSolveModal({
       setSubmitting(false)
       return
     }
-    onChanged()
+    onSubmitted()
     onClose()
   }
 
@@ -653,16 +660,21 @@ function QuizSolveModal({
           </p>
 
           {/* 풀이 영역 */}
-          {solved ? (
-            <div className="mt-5 p-4 rounded-2xl bg-mint/15 text-center">
-              <p className="text-base font-black text-[#2C7846]">✅ 정답입니다!</p>
+          {locked ? (
+            <div className="mt-5 p-4 rounded-2xl bg-text-dark/5 text-center">
+              <p className="text-base font-black text-text-dark/60">
+                🔒 제출 완료
+              </p>
               {answer?.submitted && answer.submitted !== '[현장미션승인]' && (
-                <p className="mt-1 text-xs text-text-dark/70">
-                  제출: {answer.submitted}
+                <p className="mt-1 text-xs text-text-dark/60">
+                  제출한 답: {answer.submitted}
                 </p>
               )}
+              <p className="mt-1 text-xs text-text-dark/50">
+                결과는 게임이 끝난 뒤 결과 화면에서 확인할 수 있어요
+              </p>
             </div>
-          ) : isAwaiting ? (
+          ) : missionPending ? (
             <div className="mt-5 p-4 rounded-2xl bg-[#F4C430]/15 text-center">
               <p className="text-base font-black text-[#A88300]">
                 🕐 운영자 승인 대기 중...
@@ -673,22 +685,6 @@ function QuizSolveModal({
             </div>
           ) : (
             <>
-              {isRejected && (
-                <div className="mt-4 p-3 rounded-xl bg-[#E94B3C]/10">
-                  <p className="text-xs font-bold text-[#E94B3C]">
-                    ❌ 직전 요청이 거절되었어요
-                  </p>
-                  {missionRequest?.note && (
-                    <p className="mt-1 text-xs text-text-dark/70 italic">
-                      "{missionRequest.note}"
-                    </p>
-                  )}
-                  <p className="mt-1 text-xs text-text-dark/60">
-                    다시 시도할 수 있어요.
-                  </p>
-                </div>
-              )}
-
               {quiz.type === 'text' && (
                 <div className="mt-5">
                   <label className="text-xs font-bold text-text-dark">
@@ -697,10 +693,7 @@ function QuizSolveModal({
                   <input
                     type="text"
                     value={textAnswer}
-                    onChange={(e) => {
-                      setTextAnswer(e.target.value)
-                      if (wrongMsg) setWrongMsg(null)
-                    }}
+                    onChange={(e) => setTextAnswer(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleTextSubmit()
                     }}
@@ -719,10 +712,7 @@ function QuizSolveModal({
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => {
-                          setChoiceIdx(idx)
-                          if (wrongMsg) setWrongMsg(null)
-                        }}
+                        onClick={() => setChoiceIdx(idx)}
                         className={`flex items-center gap-3 px-3 py-3 rounded-2xl border-2 text-left transition-colors ${
                           selected
                             ? 'border-orange-main bg-orange-main/5'
@@ -844,11 +834,6 @@ function QuizSolveModal({
                 </div>
               )}
 
-              {wrongMsg && (
-                <p className="mt-3 text-sm font-bold text-[#E94B3C] text-center animate-slide-in-down">
-                  {wrongMsg}
-                </p>
-              )}
               {error && (
                 <p className="mt-2 text-xs font-semibold text-[#E94B3C]">
                   {error}
@@ -867,9 +852,9 @@ function QuizSolveModal({
           )}
         </div>
 
-        {!solved && (
+        {!locked && !missionPending && (
           <div className="px-6 py-4 border-t border-text-dark/10 flex items-center justify-end gap-2">
-            {quiz.hint && !showHint && !isAwaiting && (
+            {quiz.hint && !showHint && (
               <button
                 type="button"
                 onClick={handleHint}
@@ -889,7 +874,7 @@ function QuizSolveModal({
                     : 'bg-orange-main text-white hover:bg-orange-sub'
                 }`}
               >
-                {submitting ? '확인 중...' : '제출'}
+                {submitting ? '제출 중...' : '제출'}
               </button>
             )}
             {quiz.type === 'choice' && (
@@ -903,10 +888,10 @@ function QuizSolveModal({
                     : 'bg-orange-main text-white hover:bg-orange-sub'
                 }`}
               >
-                {submitting ? '확인 중...' : '제출'}
+                {submitting ? '제출 중...' : '제출'}
               </button>
             )}
-            {quiz.type === 'mission' && !isAwaiting && (
+            {quiz.type === 'mission' && (
               <button
                 type="button"
                 onClick={handleMissionRequest}
