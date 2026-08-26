@@ -10,6 +10,9 @@ import TeamCreate from './pages/TeamCreate'
 import TeamJoin from './pages/TeamJoin'
 import Lobby from './pages/Lobby'
 import Mission from './pages/Mission'
+import DaySelect from './pages/DaySelect'
+import LocationSelect from './pages/LocationSelect'
+import LocationMission from './pages/LocationMission'
 import Result from './pages/Result'
 import Survey from './pages/Survey'
 import AdminLogin from './pages/admin/AdminLogin'
@@ -60,6 +63,30 @@ function App() {
           element={
             <ParticipantGate>
               <Mission />
+            </ParticipantGate>
+          }
+        />
+        <Route
+          path="/day-select"
+          element={
+            <ParticipantGate>
+              <DaySelect />
+            </ParticipantGate>
+          }
+        />
+        <Route
+          path="/location-select"
+          element={
+            <ParticipantGate>
+              <LocationSelect />
+            </ParticipantGate>
+          }
+        />
+        <Route
+          path="/location-mission/:locationGroup"
+          element={
+            <ParticipantGate>
+              <LocationMission />
             </ParticipantGate>
           }
         />

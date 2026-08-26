@@ -13,6 +13,8 @@ export interface MissionRequest {
   note: string | null
   media_url: string | null
   media_type: 'video' | 'photo' | null
+  rejection_reason: string | null
+  slot_label: string | null
   team_id: string
   quiz_id: string
   team: { team_name: string } | null
@@ -26,7 +28,7 @@ export interface MissionRequest {
 
 const JOIN_SELECT = `
   id, status, requested_at, processed_at, processed_by, note,
-  media_url, media_type,
+  media_url, media_type, rejection_reason, slot_label,
   team_id, quiz_id,
   team:tanggo_teams!inner(team_name),
   quiz:tanggo_quizzes!inner(order_num, question, location_hint, mission_subtype)
@@ -187,22 +189,24 @@ export default function MissionApprovalQueue({ actorLabel }: Props) {
     setRejectFor(null)
     setPending((prev) => prev.filter((r) => r.id !== req.id))
 
+    const reason = rejectReason.trim() || null
     const { error: updateErr } = await supabase
       .from('tanggo_mission_requests')
       .update({
         status: 'rejected',
         processed_at: new Date().toISOString(),
         processed_by: actorLabel,
-        note: rejectReason.trim() || null,
+        note: reason,
+        rejection_reason: reason,
       })
       .eq('id', req.id)
 
     if (updateErr) {
-      setToast(`거절 실패: ${updateErr.message}`)
+      setToast(`미승인 실패: ${updateErr.message}`)
     } else {
       const teamName = req.team?.team_name ?? '팀'
       const orderNum = req.quiz?.order_num ?? '?'
-      setToast(`❌ ${teamName} - 미션 ${orderNum} 거절됨`)
+      setToast(`❌ ${teamName} - 미션 ${orderNum} 미승인`)
     }
 
     markBusy(req.id, false)
@@ -329,7 +333,7 @@ export default function MissionApprovalQueue({ actorLabel }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 pt-5 pb-3 border-b border-text-dark/10 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-text-dark">❌ 거절 사유</h2>
+              <h2 className="text-lg font-bold text-text-dark">❌ 미승인 사유</h2>
               <button
                 type="button"
                 onClick={() => setRejectFor(null)}
@@ -346,12 +350,21 @@ export default function MissionApprovalQueue({ actorLabel }: Props) {
                 </span>{' '}
                 · 미션{' '}
                 <span className="tabular-nums">{rejectFor.quiz?.order_num}</span>
+                {rejectFor.slot_label && (
+                  <>
+                    <span className="text-text-dark/40 mx-1">·</span>
+                    <span className="font-semibold">{rejectFor.slot_label}</span>
+                  </>
+                )}
+              </p>
+              <p className="mt-2 text-xs font-bold text-text-dark/50">
+                미승인 사유는 참가자 화면에 그대로 표시됩니다
               </p>
               <textarea
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={3}
-                placeholder="사유 입력 (선택)"
+                placeholder="예) 지정된 장소가 보이지 않아요. 안내판이 함께 나오게 다시 찍어주세요."
                 className="mt-3 w-full px-3 py-2.5 rounded-xl border-2 border-text-dark/10 bg-white text-sm font-medium placeholder:text-text-dark/30 focus:outline-none focus:border-[#E94B3C] focus:ring-2 focus:ring-[#E94B3C]/20 resize-y"
                 autoFocus
               />
@@ -369,7 +382,7 @@ export default function MissionApprovalQueue({ actorLabel }: Props) {
                 onClick={confirmReject}
                 className="px-5 py-2.5 rounded-xl text-sm font-bold bg-[#E94B3C] text-white hover:bg-[#d83d2f]"
               >
-                거절하기
+                미승인 확정
               </button>
             </div>
           </div>
@@ -496,6 +509,11 @@ function PendingCard({
       className="rounded-2xl border-4 border-orange-main bg-white p-4 animate-slide-in-down"
       style={{ boxShadow: 'var(--shadow-orange-sm)' }}
     >
+      {req.slot_label && (
+        <p className="mb-2 inline-flex items-center px-2 py-0.5 rounded-full bg-orange-main/10 text-orange-main text-[11px] font-black">
+          🧩 {req.slot_label}
+        </p>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-base font-black text-text-dark">
@@ -538,7 +556,7 @@ function PendingCard({
           disabled={busy}
           className="flex-1 py-3 rounded-xl bg-[#E94B3C] text-white text-base font-black hover:bg-[#d83d2f] active:scale-[0.98] transition-all disabled:opacity-50"
         >
-          ❌ 거절
+          ❌ 미승인
         </button>
       </div>
     </li>
@@ -566,9 +584,14 @@ function ProcessedCard({
               미션 <span className="tabular-nums">#{req.quiz?.order_num}</span>
             </span>
           </p>
-          {!approved && req.note && (
+          {req.slot_label && (
+            <p className="mt-0.5 text-[11px] font-bold text-orange-main truncate">
+              🧩 {req.slot_label}
+            </p>
+          )}
+          {!approved && (req.rejection_reason ?? req.note) && (
             <p className="mt-1 text-xs text-text-dark/60 italic">
-              "{req.note}"
+              "{req.rejection_reason ?? req.note}"
             </p>
           )}
           {req.processed_by && (
@@ -585,7 +608,7 @@ function ProcessedCard({
                 : 'bg-[#E94B3C]/15 text-[#E94B3C]'
             }`}
           >
-            {approved ? '✅ 승인' : '❌ 거절'}
+            {approved ? '✅ 승인' : '❌ 미승인'}
           </span>
           <p className="mt-1 text-[11px] text-text-dark/40 tabular-nums">
             {formatHM(req.processed_at)} ·{' '}

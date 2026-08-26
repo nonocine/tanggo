@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
@@ -107,8 +107,14 @@ function StatusBadge({ status }: { status: CardStatus }) {
 
 export default function Mission() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+
+  // ?day=1 — 멀티 데이 모드에서 해당 일차 미션만 표시한다 (없으면 기존처럼 전체)
+  const dayParam = searchParams.get('day')
+  const dayNumber =
+    dayParam !== null && Number.isFinite(Number(dayParam)) ? Number(dayParam) : null
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [answersMap, setAnswersMap] = useState<Map<string, AnswerRow>>(new Map())
@@ -127,13 +133,15 @@ export default function Mission() {
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
+    const quizQuery = supabase
+      .from('tanggo_quizzes')
+      .select('*')
+      .eq('is_active', true)
+    if (dayNumber !== null) quizQuery.eq('day_number', dayNumber)
+
     const [quizzesRes, answersRes, requestsRes, hintsRes, teamRes, configRes] =
       await Promise.all([
-        supabase
-          .from('tanggo_quizzes')
-          .select('*')
-          .eq('is_active', true)
-          .order('order_num', { ascending: true }),
+        quizQuery.order('order_num', { ascending: true }),
         supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
         supabase
           .from('tanggo_mission_requests')
@@ -194,7 +202,7 @@ export default function Mission() {
     if (configRes.data) setConfig(configRes.data as EventConfigRow)
 
     setLoading(false)
-  }, [teamId])
+  }, [teamId, dayNumber])
 
   useEffect(() => {
     fetchAll()
@@ -236,6 +244,8 @@ export default function Mission() {
     if (finalizedCount < total) return
     finishingRef.current = true
     setCelebrate(true)
+    // 멀티 데이(?day=N)에서는 해당 일차만 끝난 것이므로 팀을 종료 처리하지 않는다
+    if (dayNumber !== null) return
     supabase
       .from('tanggo_teams')
       .update({ finished_at: new Date().toISOString() })
@@ -243,7 +253,7 @@ export default function Mission() {
       .then(() => {
         setTimeout(() => navigate('/result', { replace: true }), 3000)
       })
-  }, [finalizedCount, total, team, navigate])
+  }, [finalizedCount, total, team, navigate, dayNumber])
 
   // service_ended 시 result 화면으로
   useEffect(() => {
@@ -409,9 +419,25 @@ export default function Mission() {
             <h2 className="text-2xl font-black text-orange-main">
               모든 미션을 완료했어요!
             </h2>
-            <p className="mt-2 text-sm text-text-dark/70">
-              잠시 후 결과 화면으로 이동합니다...
-            </p>
+            {dayNumber !== null ? (
+              <>
+                <p className="mt-2 text-sm text-text-dark/70">
+                  {dayNumber}일차 미션을 모두 마쳤어요 🙌
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/day-select', { replace: true })}
+                  className="mt-6 w-full rounded-2xl bg-orange-main py-3.5 text-base font-bold text-white hover:bg-orange-sub active:scale-[0.98] transition-all"
+                  style={{ boxShadow: 'var(--shadow-orange-sm)' }}
+                >
+                  📅 일차 선택으로 돌아가기
+                </button>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-text-dark/70">
+                잠시 후 결과 화면으로 이동합니다...
+              </p>
+            )}
           </div>
         </div>
       )}

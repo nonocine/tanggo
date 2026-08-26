@@ -4,6 +4,7 @@ import { SEASON_CONFIG } from '../../config/seasonConfig'
 import { ADMIN_AUTH_KEY } from '../../components/AdminProtected'
 import QuizManager from './tabs/QuizManager'
 import TeamManager from './tabs/TeamManager'
+import LocationAssign from './tabs/LocationAssign'
 import GameProgress from './tabs/GameProgress'
 import EventSettings from './tabs/EventSettings'
 import MissionApproval from './tabs/MissionApproval'
@@ -15,6 +16,7 @@ import TextManager from './tabs/TextManager'
 type TabKey =
   | 'quiz'
   | 'teams'
+  | 'location-assign'
   | 'progress'
   | 'approvals'
   | 'results'
@@ -34,6 +36,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { key: 'quiz', icon: '📋', label: '미션 관리' },
   { key: 'teams', icon: '👥', label: '팀 관리' },
+  { key: 'location-assign', icon: '📍', label: '장소 배정', shortLabel: '장소' },
   { key: 'progress', icon: '🎮', label: '게임 진행 상황', shortLabel: '진행' },
   { key: 'approvals', icon: '✋', label: '미션 승인', shortLabel: '승인' },
   { key: 'results', icon: '🏆', label: '순위/결과' },
@@ -154,6 +157,7 @@ export default function AdminDashboard() {
         <main className="flex-1 min-w-0 px-3 md:px-6 py-5 md:py-6 pb-24 md:pb-6">
           {currentTab === 'quiz' && <QuizManager />}
           {currentTab === 'teams' && <TeamManager />}
+          {currentTab === 'location-assign' && <LocationAssign />}
           {currentTab === 'progress' && <GameProgress />}
           {currentTab === 'settings' && <EventSettings />}
           {currentTab === 'approvals' && <MissionApproval />}
@@ -163,6 +167,7 @@ export default function AdminDashboard() {
           {currentTab === 'data' && <DataManager />}
           {currentTab !== 'quiz' &&
             currentTab !== 'teams' &&
+            currentTab !== 'location-assign' &&
             currentTab !== 'progress' &&
             currentTab !== 'settings' &&
             currentTab !== 'approvals' &&

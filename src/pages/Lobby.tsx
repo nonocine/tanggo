@@ -17,9 +17,13 @@ interface TeamRow {
   created_at: string
 }
 
+type EventMode = 'single' | 'multi_day'
+
 interface EventConfigRow {
   event_start_at: string | null
   service_ended: boolean
+  event_mode: EventMode
+  days: unknown
 }
 
 const GO_DURATION_MS = 3000
@@ -28,9 +32,14 @@ type LobbyState =
   | { kind: 'loading' }
   | { kind: 'service_ended' }
   | { kind: 'go_to_result' }
-  | { kind: 'go_to_mission' }
+  | { kind: 'go_to_mission'; eventMode: EventMode }
   | { kind: 'waiting' }
   | { kind: 'go'; secondsLeft: number }
+
+/** event_mode 에 따라 GO 이후 이동할 경로 */
+function missionPathFor(mode: EventMode): string {
+  return mode === 'multi_day' ? '/day-select' : '/mission'
+}
 
 // 단순화된 상태 머신:
 // 관리자가 [행사 시작]을 누르면 모든 팀의 started_at 이 한꺼번에 설정된다.
@@ -41,12 +50,13 @@ function computeState(
   now: number,
 ): LobbyState {
   if (!team || !config) return { kind: 'loading' }
+  const eventMode: EventMode = config.event_mode === 'multi_day' ? 'multi_day' : 'single'
   if (config.service_ended) return { kind: 'service_ended' }
   if (team.finished_at) return { kind: 'go_to_result' }
   if (!team.started_at) return { kind: 'waiting' }
 
   const startedMs = new Date(team.started_at).getTime()
-  if (Number.isNaN(startedMs)) return { kind: 'go_to_mission' }
+  if (Number.isNaN(startedMs)) return { kind: 'go_to_mission', eventMode }
 
   const elapsed = now - startedMs
   if (elapsed < GO_DURATION_MS) {
@@ -55,7 +65,7 @@ function computeState(
       secondsLeft: Math.max(1, Math.ceil((GO_DURATION_MS - elapsed) / 1000)),
     }
   }
-  return { kind: 'go_to_mission' }
+  return { kind: 'go_to_mission', eventMode }
 }
 
 function pad(n: number): string {
@@ -90,7 +100,7 @@ export default function Lobby() {
         .maybeSingle(),
       supabase
         .from('tanggo_event_config')
-        .select('event_start_at, service_ended')
+        .select('event_start_at, service_ended, event_mode, days')
         .eq('id', 1)
         .maybeSingle(),
     ])
@@ -115,18 +125,24 @@ export default function Lobby() {
   }, [])
 
   const state = computeState(team, config, now)
+  const eventMode: EventMode =
+    config?.event_mode === 'multi_day' ? 'multi_day' : 'single'
 
   // 자동 리다이렉트
   useEffect(() => {
     if (state.kind === 'go_to_result') {
       navigate('/result', { replace: true })
     } else if (state.kind === 'go_to_mission') {
-      navigate('/mission', { replace: true })
+      if (eventMode === 'multi_day') {
+        navigate('/day-select', { replace: true })
+      } else {
+        navigate('/mission', { replace: true })
+      }
     }
-  }, [state.kind, navigate])
+  }, [state.kind, eventMode, navigate])
 
   function goNow() {
-    navigate('/mission', { replace: true })
+    navigate(missionPathFor(eventMode), { replace: true })
   }
 
   return (

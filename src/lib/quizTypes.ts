@@ -1,6 +1,11 @@
 export type QuizType = 'text' | 'choice' | 'mission'
 export type MissionSubtype = 'video' | 'photo' | 'verify'
 
+export interface ReferenceImage {
+  label: string
+  url: string
+}
+
 export interface Quiz {
   id: string
   order_num: number
@@ -14,6 +19,12 @@ export interface Quiz {
   hint: string | null
   is_active: boolean
   created_at: string
+  day_number: number | null
+  location_group: string | null
+  location_group_order: number | null
+  slot_order: number
+  requires_approval_to_proceed: boolean
+  reference_images: ReferenceImage[] | null
 }
 
 export interface QuizInput {
@@ -27,6 +38,13 @@ export interface QuizInput {
   answer_variants: string[] | null
   hint: string | null
   is_active: boolean
+  // 멀티 데이 / 장소별 미션용 (미지정 시 DB 기본값 사용 — 기존 저장 로직이 덮어쓰지 않도록 선택 필드)
+  day_number?: number | null
+  location_group?: string | null
+  location_group_order?: number | null
+  slot_order?: number
+  requires_approval_to_proceed?: boolean
+  reference_images?: ReferenceImage[] | null
 }
 
 export const QUIZ_TYPE_LABEL: Record<QuizType, string> = {
