@@ -111,10 +111,15 @@ export default function TeamCreate() {
     if (!canSubmit) return
     setSubmitting(true)
 
+    const leaderName = members[0].name.trim()
     const { data: team, error: teamError } = await supabase
       .from('tanggo_teams')
-      .insert({ team_name: trimmedName, member_count: members.length })
-      .select('id, team_name')
+      .insert({
+        team_name: trimmedName,
+        member_count: members.length,
+        leader_name: leaderName, // 첫 번째 팀원 = 방장
+      })
+      .select('id, team_name, leader_name')
       .single()
 
     if (teamError || !team) {
@@ -141,7 +146,7 @@ export default function TeamCreate() {
       return
     }
 
-    setTeam(team.id, team.team_name)
+    setTeam(team.id, team.team_name, leaderName)
     navigate('/lobby')
   }
 
@@ -242,9 +247,16 @@ export default function TeamCreate() {
                     <div className="flex-1 relative">
                       <div
                         aria-hidden
-                        className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-full bg-orange-sub text-white text-xs font-bold tabular-nums"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1"
                       >
-                        {idx + 1}
+                        <span className="w-7 h-7 inline-flex items-center justify-center rounded-full bg-orange-sub text-white text-xs font-bold tabular-nums">
+                          {idx + 1}
+                        </span>
+                        {idx === 0 && (
+                          <span className="text-sm leading-none" title="방장">
+                            👑
+                          </span>
+                        )}
                       </div>
                       <input
                         type="text"
@@ -252,11 +264,13 @@ export default function TeamCreate() {
                         onChange={(e) =>
                           updateMember(m.id, e.target.value.slice(0, MEMBER_NAME_MAX))
                         }
-                        placeholder="팀원 이름"
+                        placeholder={idx === 0 ? '방장 이름 (본인)' : '팀원 이름'}
                         maxLength={MEMBER_NAME_MAX}
                         autoComplete="off"
-                        aria-label={`팀원 ${idx + 1} 이름`}
-                        className={`w-full pl-12 pr-4 py-3 rounded-2xl border-2 bg-white text-base font-medium placeholder:text-text-dark/30 focus:outline-none focus:ring-2 transition-colors ${
+                        aria-label={
+                          idx === 0 ? '방장 이름 (본인)' : `팀원 ${idx + 1} 이름`
+                        }
+                        className={`w-full ${idx === 0 ? 'pl-[4.75rem]' : 'pl-12'} pr-4 py-3 rounded-2xl border-2 bg-white text-base font-medium placeholder:text-text-dark/30 focus:outline-none focus:ring-2 transition-colors ${
                           err
                             ? 'border-[#E94B3C] focus:border-[#E94B3C] focus:ring-[#E94B3C]/20'
                             : 'border-text-dark/10 focus:border-orange-main focus:ring-orange-main/20'
@@ -300,6 +314,7 @@ export default function TeamCreate() {
 
         {/* 규칙 안내 */}
         <div className="mt-4 rounded-2xl bg-text-dark/5 px-4 py-3 text-xs leading-relaxed text-text-dark/70">
+          <p>👑 첫 번째 팀원이 방장이 되어 팀 답안을 제출해요</p>
           <p>ℹ️ 게임 시작 후엔 팀원을 바꿀 수 없어요</p>
           <p>ℹ️ 한 번 만든 팀 이름은 다른 팀이 사용할 수 없어요</p>
           <p>ℹ️ 팀원은 {MEMBER_MIN}명 이상 {MEMBER_MAX}명 이하로 입력해주세요</p>

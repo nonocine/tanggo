@@ -84,10 +84,10 @@ export default function TeamJoin() {
   async function handleMemberConfirmed(memberName: string) {
     if (!selected) return
 
-    // service_ended 재확인
+    // service_ended + event_mode 재확인
     const { data: cfg } = await supabase
       .from('tanggo_event_config')
-      .select('service_ended')
+      .select('service_ended, event_mode')
       .eq('id', 1)
       .maybeSingle()
     if (cfg?.service_ended) {
@@ -111,7 +111,12 @@ export default function TeamJoin() {
     if (finishedAt) {
       navigate('/result', { replace: true })
     } else if (startedAt) {
-      navigate('/mission', { replace: true })
+      // multi_day면 일차 선택, single이면 기존 미션 화면
+      if (cfg?.event_mode === 'multi_day') {
+        navigate('/day-select', { replace: true })
+      } else {
+        navigate('/mission', { replace: true })
+      }
     } else {
       navigate('/lobby', { replace: true })
     }

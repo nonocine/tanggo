@@ -15,6 +15,12 @@ import {
   formatBytes,
   uploadMissionMedia,
 } from '../lib/missionMedia'
+import type { MemberVoteRow } from '../lib/memberVotes'
+import {
+  checkAllAgreed,
+  fetchVotesForQuiz,
+  upsertMyVote,
+} from '../lib/memberVotes'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -44,6 +50,8 @@ interface TeamRow {
   team_name: string
   started_at: string | null
   finished_at: string | null
+  leader_name: string | null
+  member_count: number | null
 }
 
 interface EventConfigRow {
@@ -110,6 +118,7 @@ export default function Mission() {
   const [searchParams] = useSearchParams()
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+  const memberName = useTeamStore((s) => s.memberName)
 
   // ?day=1 — 멀티 데이 모드에서 해당 일차 미션만 표시한다 (없으면 기존처럼 전체)
   const dayParam = searchParams.get('day')
@@ -122,6 +131,8 @@ export default function Mission() {
     new Map(),
   )
   const [hintSeen, setHintSeen] = useState<Set<string>>(new Set())
+  const [memberNames, setMemberNames] = useState<string[]>([])
+  const [votesMap, setVotesMap] = useState<Map<string, MemberVoteRow[]>>(new Map())
   const [team, setTeam] = useState<TeamRow | null>(null)
   const [config, setConfig] = useState<EventConfigRow | null>(null)
   const [loading, setLoading] = useState(true)
@@ -139,8 +150,15 @@ export default function Mission() {
       .eq('is_active', true)
     if (dayNumber !== null) quizQuery.eq('day_number', dayNumber)
 
-    const [quizzesRes, answersRes, requestsRes, hintsRes, teamRes, configRes] =
-      await Promise.all([
+    const [
+      quizzesRes,
+      answersRes,
+      requestsRes,
+      hintsRes,
+      teamRes,
+      configRes,
+      membersRes,
+    ] = await Promise.all([
         quizQuery.order('order_num', { ascending: true }),
         supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
         supabase
@@ -153,7 +171,9 @@ export default function Mission() {
           .eq('team_id', teamId),
         supabase
           .from('tanggo_teams')
-          .select('id, team_name, started_at, finished_at')
+          .select(
+            'id, team_name, started_at, finished_at, leader_name, member_count',
+          )
           .eq('id', teamId)
           .maybeSingle(),
         supabase
@@ -161,6 +181,11 @@ export default function Mission() {
           .select('service_ended')
           .eq('id', 1)
           .maybeSingle(),
+        supabase
+          .from('tanggo_team_members')
+          .select('name, created_at')
+          .eq('team_id', teamId)
+          .order('created_at', { ascending: true }),
       ])
 
     const firstErr =
@@ -200,6 +225,9 @@ export default function Mission() {
 
     if (teamRes.data) setTeam(teamRes.data as TeamRow)
     if (configRes.data) setConfig(configRes.data as EventConfigRow)
+    setMemberNames(
+      ((membersRes.data ?? []) as { name: string }[]).map((m) => m.name),
+    )
 
     setLoading(false)
   }, [teamId, dayNumber])
@@ -209,6 +237,54 @@ export default function Mission() {
     const t = setInterval(fetchAll, POLL_INTERVAL_MS)
     return () => clearInterval(t)
   }, [fetchAll])
+
+  const reloadVotes = useCallback(
+    async (quizId: string) => {
+      if (!teamId) return
+      const votes = await fetchVotesForQuiz(teamId, quizId)
+      setVotesMap((prev) => new Map(prev).set(quizId, votes))
+    },
+    [teamId],
+  )
+
+  // 열린 문제의 팀원 투표 현황 구독 (현장 미션은 투표 불필요)
+  useEffect(() => {
+    if (!openQuiz || !teamId) return
+    if (openQuiz.type === 'mission') return
+    const quizId = openQuiz.id
+
+    reloadVotes(quizId)
+
+    const channel = supabase
+      .channel(`votes-${teamId}-${quizId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'tanggo',
+          table: 'tanggo_member_votes',
+          filter: `team_id=eq.${teamId}`,
+        },
+        () => {
+          reloadVotes(quizId)
+        },
+      )
+      .subscribe()
+
+    // Realtime 이 막혀 있어도 현황이 갱신되도록 폴링 백업
+    const t = setInterval(() => reloadVotes(quizId), POLL_INTERVAL_MS)
+
+    return () => {
+      clearInterval(t)
+      supabase.removeChannel(channel)
+    }
+  }, [openQuiz, teamId, reloadVotes])
+
+  // 방장 판정 — leader_name 이 없는 예전 팀은 전원이 제출 가능
+  const leaderName = team?.leader_name ?? null
+  const isLeader = !leaderName || (!!memberName && memberName === leaderName)
+  const totalMembers =
+    memberNames.length > 0 ? memberNames.length : (team?.member_count ?? 0)
 
   // 제출이 끝난(확정된) 미션 수 — 정답/오답과 무관.
   // text/choice: 답안 제출됨 / mission: 승인(답안 생성) 또는 거절. 승인 대기는 미확정.
@@ -399,6 +475,13 @@ export default function Mission() {
           answer={answersMap.get(openQuiz.id)}
           missionRequest={requestsMap.get(openQuiz.id)}
           hintAlreadySeen={hintSeen.has(openQuiz.id)}
+          memberName={memberName}
+          memberNames={memberNames}
+          totalMembers={totalMembers}
+          leaderName={leaderName}
+          isLeader={isLeader}
+          votes={votesMap.get(openQuiz.id) ?? []}
+          onVoted={() => reloadVotes(openQuiz.id)}
           onClose={() => setOpenQuiz(null)}
           onChanged={() => {
             fetchAll()
@@ -460,6 +543,13 @@ function QuizSolveModal({
   answer,
   missionRequest,
   hintAlreadySeen,
+  memberName,
+  memberNames,
+  totalMembers,
+  leaderName,
+  isLeader,
+  votes,
+  onVoted,
   onClose,
   onChanged,
   onSubmitted,
@@ -469,12 +559,21 @@ function QuizSolveModal({
   answer: AnswerRow | undefined
   missionRequest: MissionRequestRow | undefined
   hintAlreadySeen: boolean
+  memberName: string | null
+  memberNames: string[]
+  totalMembers: number
+  leaderName: string | null
+  isLeader: boolean
+  votes: MemberVoteRow[]
+  onVoted: () => void
   onClose: () => void
   onChanged: () => void
   onSubmitted: () => void
 }) {
   const [textAnswer, setTextAnswer] = useState('')
+  const [textTouched, setTextTouched] = useState(false)
   const [choiceIdx, setChoiceIdx] = useState<number | null>(null)
+  const [voting, setVoting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showHint, setShowHint] = useState(hintAlreadySeen)
   const [error, setError] = useState<string | null>(null)
@@ -505,16 +604,47 @@ function QuizSolveModal({
   // 한 번 제출하면 잠김 — 정답/오답 무관. mission은 거절도 확정으로 본다.
   const locked = !!answer || (isMission && missionRequest?.status === 'rejected')
 
-  async function handleTextSubmit() {
+  /* ── 전원 동의 투표 ─────────────────────────────────
+     본인 이름이 확인된 팀원만 투표에 참여한다.
+     memberName 이 없는(예전 저장분) 경우 기존 단독 제출 방식으로 동작. */
+  const votingEnabled = !isMission && !!memberName && totalMembers > 0
+  const myVote = memberName
+    ? (votes.find((v) => v.member_name === memberName) ?? null)
+    : null
+  const { agreed, answer: agreedAnswer } = checkAllAgreed(votes, totalMembers)
+  const textValue = textTouched ? textAnswer : (myVote?.selected_answer ?? textAnswer)
+  const selectedIdx =
+    choiceIdx ??
+    (myVote && quiz.type === 'choice' ? Number(myVote.selected_answer) - 1 : null)
+
+  async function castVote(value: string) {
+    if (!memberName || voting || locked || !value.trim()) return
+    setVoting(true)
+    setError(null)
+    try {
+      await upsertMyVote(teamId, quiz.id, memberName, value.trim())
+      onVoted()
+    } catch (e) {
+      setError(
+        `내 답 저장 실패. 다시 시도해주세요${
+          e instanceof Error ? ` (${e.message})` : ''
+        }`,
+      )
+    }
+    setVoting(false)
+  }
+
+  async function submitAnswer(submitted: string) {
     if (submitting || locked || missionPending) return
-    if (!textAnswer.trim()) return
+    const value = submitted.trim()
+    if (!value) return
     setSubmitting(true)
     setError(null)
-    const isCorrect = checkAnswer(quiz, textAnswer)
+    const isCorrect = checkAnswer(quiz, value)
     const { error } = await supabase.from('tanggo_answers').insert({
       team_id: teamId,
       quiz_id: quiz.id,
-      submitted: textAnswer.trim(),
+      submitted: value,
       is_correct: isCorrect,
       answered_at: new Date().toISOString(),
     })
@@ -527,26 +657,23 @@ function QuizSolveModal({
     onClose()
   }
 
-  async function handleChoiceSubmit() {
-    if (submitting || locked || missionPending || choiceIdx === null) return
-    setSubmitting(true)
-    setError(null)
-    const submitted = String(choiceIdx + 1)
-    const isCorrect = checkAnswer(quiz, submitted)
-    const { error } = await supabase.from('tanggo_answers').insert({
-      team_id: teamId,
-      quiz_id: quiz.id,
-      submitted,
-      is_correct: isCorrect,
-      answered_at: new Date().toISOString(),
-    })
-    if (error) {
-      setError(error.message)
-      setSubmitting(false)
+  function handleTextSubmit() {
+    if (votingEnabled) {
+      if (!agreed || !isLeader || !agreedAnswer) return
+      submitAnswer(agreedAnswer)
       return
     }
-    onSubmitted()
-    onClose()
+    submitAnswer(textAnswer)
+  }
+
+  function handleChoiceSubmit() {
+    if (votingEnabled) {
+      if (!agreed || !isLeader || !agreedAnswer) return
+      submitAnswer(agreedAnswer)
+      return
+    }
+    if (selectedIdx === null) return
+    submitAnswer(String(selectedIdx + 1))
   }
 
   function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
@@ -714,31 +841,64 @@ function QuizSolveModal({
               {quiz.type === 'text' && (
                 <div className="mt-5">
                   <label className="text-xs font-bold text-text-dark">
-                    정답 입력
+                    {votingEnabled ? '내가 생각한 답' : '정답 입력'}
                   </label>
                   <input
                     type="text"
-                    value={textAnswer}
-                    onChange={(e) => setTextAnswer(e.target.value)}
+                    value={textValue}
+                    onChange={(e) => {
+                      setTextTouched(true)
+                      setTextAnswer(e.target.value)
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleTextSubmit()
+                      if (e.key !== 'Enter') return
+                      if (votingEnabled) castVote(textValue)
+                      else handleTextSubmit()
                     }}
                     placeholder="정답을 입력하세요"
                     autoComplete="off"
                     className="mt-1.5 w-full px-4 py-3 rounded-2xl border-2 border-text-dark/10 bg-white text-base font-medium placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20"
                   />
+                  {votingEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => castVote(textValue)}
+                      disabled={
+                        voting ||
+                        !textValue.trim() ||
+                        textValue.trim() === myVote?.selected_answer
+                      }
+                      className={`mt-2 w-full py-2.5 rounded-xl text-sm font-bold transition-all ${
+                        voting ||
+                        !textValue.trim() ||
+                        textValue.trim() === myVote?.selected_answer
+                          ? 'bg-text-dark/10 text-text-dark/40 cursor-not-allowed'
+                          : 'border-2 border-orange-main text-orange-main hover:bg-orange-main/5'
+                      }`}
+                    >
+                      {voting
+                        ? '저장 중...'
+                        : myVote
+                          ? '✏️ 내 답 수정'
+                          : '🙋 내 답 등록'}
+                    </button>
+                  )}
                 </div>
               )}
 
               {quiz.type === 'choice' && quiz.choices && (
                 <div className="mt-5 flex flex-col gap-2">
                   {quiz.choices.map((c, idx) => {
-                    const selected = choiceIdx === idx
+                    const selected = selectedIdx === idx
                     return (
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setChoiceIdx(idx)}
+                        disabled={voting}
+                        onClick={() => {
+                          setChoiceIdx(idx)
+                          if (votingEnabled) castVote(String(idx + 1))
+                        }}
                         className={`flex items-center gap-3 px-3 py-3 rounded-2xl border-2 text-left transition-colors ${
                           selected
                             ? 'border-orange-main bg-orange-main/5'
@@ -761,6 +921,19 @@ function QuizSolveModal({
                     )
                   })}
                 </div>
+              )}
+
+              {votingEnabled && (
+                <VotePanel
+                  quiz={quiz}
+                  votes={votes}
+                  memberNames={memberNames}
+                  totalMembers={totalMembers}
+                  memberName={memberName}
+                  leaderName={leaderName}
+                  isLeader={isLeader}
+                  agreed={agreed}
+                />
               )}
 
               {quiz.type === 'mission' && missionSubtype === 'verify' && (
@@ -889,34 +1062,55 @@ function QuizSolveModal({
                 💡 힌트 보기
               </button>
             )}
-            {quiz.type === 'text' && (
-              <button
-                type="button"
-                onClick={handleTextSubmit}
-                disabled={!textAnswer.trim() || submitting}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  !textAnswer.trim() || submitting
-                    ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
-                    : 'bg-orange-main text-white hover:bg-orange-sub'
-                }`}
-              >
-                {submitting ? '제출 중...' : '제출'}
-              </button>
-            )}
-            {quiz.type === 'choice' && (
-              <button
-                type="button"
-                onClick={handleChoiceSubmit}
-                disabled={choiceIdx === null || submitting}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  choiceIdx === null || submitting
-                    ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
-                    : 'bg-orange-main text-white hover:bg-orange-sub'
-                }`}
-              >
-                {submitting ? '제출 중...' : '제출'}
-              </button>
-            )}
+            {!isMission &&
+              (votingEnabled ? (
+                <button
+                  type="button"
+                  onClick={
+                    quiz.type === 'text' ? handleTextSubmit : handleChoiceSubmit
+                  }
+                  disabled={!agreed || !isLeader || submitting}
+                  title={
+                    !isLeader
+                      ? `방장(${leaderName ?? '미지정'})만 제출할 수 있어요`
+                      : undefined
+                  }
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    !agreed || !isLeader || submitting
+                      ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
+                      : 'bg-orange-main text-white hover:bg-orange-sub'
+                  }`}
+                >
+                  {submitting
+                    ? '제출 중...'
+                    : !isLeader
+                      ? '👑 방장만 제출 가능'
+                      : agreed
+                        ? '✅ 팀 답안 제출'
+                        : '전원 동의 필요'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={
+                    quiz.type === 'text' ? handleTextSubmit : handleChoiceSubmit
+                  }
+                  disabled={
+                    (quiz.type === 'text'
+                      ? !textValue.trim()
+                      : selectedIdx === null) || submitting
+                  }
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    (quiz.type === 'text'
+                      ? !textValue.trim()
+                      : selectedIdx === null) || submitting
+                      ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
+                      : 'bg-orange-main text-white hover:bg-orange-sub'
+                  }`}
+                >
+                  {submitting ? '제출 중...' : '제출'}
+                </button>
+              ))}
             {quiz.type === 'mission' && (
               <button
                 type="button"
@@ -946,6 +1140,123 @@ function QuizSolveModal({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** 팀원별 답 선택 현황 + 전원 동의 여부 패널 */
+function VotePanel({
+  quiz,
+  votes,
+  memberNames,
+  totalMembers,
+  memberName,
+  leaderName,
+  isLeader,
+  agreed,
+}: {
+  quiz: Quiz
+  votes: MemberVoteRow[]
+  memberNames: string[]
+  totalMembers: number
+  memberName: string | null
+  leaderName: string | null
+  isLeader: boolean
+  agreed: boolean
+}) {
+  const voteByName = new Map(votes.map((v) => [v.member_name, v]))
+  // 팀원 명단이 있으면 그 순서대로, 없으면 투표한 사람만 표시
+  const rows =
+    memberNames.length > 0
+      ? memberNames
+      : votes.map((v) => v.member_name).sort()
+
+  function labelOf(value: string): string {
+    if (quiz.type === 'choice') {
+      const idx = Number(value) - 1
+      const text = quiz.choices?.[idx]
+      return text ? `${idx + 1}. ${text}` : `보기 ${value}`
+    }
+    return value
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border-2 border-text-dark/10 bg-cream/60 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-bold text-text-dark/70">🙋 팀원 선택 현황</p>
+        <p className="text-xs font-bold text-text-dark/60 tabular-nums">
+          <span className="text-orange-main">{votes.length}</span> / {totalMembers}명
+        </p>
+      </div>
+
+      <ul className="mt-2 flex flex-col gap-1">
+        {rows.map((name) => {
+          const vote = voteByName.get(name)
+          const isMe = name === memberName
+          return (
+            <li
+              key={name}
+              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl ${
+                vote ? 'bg-white' : 'bg-white/50'
+              }`}
+            >
+              <span className="min-w-0 flex items-center gap-1">
+                {name === leaderName && (
+                  <span aria-label="방장" title="방장">
+                    👑
+                  </span>
+                )}
+                <span
+                  className={`text-xs font-bold truncate ${
+                    isMe ? 'text-orange-main' : 'text-text-dark/80'
+                  }`}
+                >
+                  {name}
+                  {isMe && ' (나)'}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 text-[11px] font-bold max-w-[55%] truncate ${
+                  vote ? 'text-text-dark' : 'text-text-dark/35'
+                }`}
+              >
+                {vote ? labelOf(vote.selected_answer) : '선택 대기…'}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+
+      {agreed ? (
+        <div className="mt-2.5 px-3 py-2 rounded-xl bg-mint-light">
+          <p className="text-xs font-black text-[#2C7846]">
+            ✅ 전원 동의 완료!
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-dark/70">
+            {isLeader
+              ? '아래 [팀 답안 제출]을 눌러 제출하세요'
+              : `방장(${leaderName ?? '미지정'})이 제출할 수 있어요`}
+          </p>
+        </div>
+      ) : votes.length < totalMembers ? (
+        <div className="mt-2.5 px-3 py-2 rounded-xl bg-[#F4C430]/20">
+          <p className="text-xs font-black text-[#A88300]">
+            🕐 아직 모두 선택하지 않았어요
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-dark/70">
+            팀원 전원이 같은 답을 골라야 제출할 수 있어요
+          </p>
+        </div>
+      ) : (
+        <div className="mt-2.5 px-3 py-2 rounded-xl bg-[#E94B3C]/10">
+          <p className="text-xs font-black text-[#E94B3C]">
+            🤔 의견이 갈렸어요
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-dark/70">
+            팀원과 이야기한 뒤 답을 다시 골라주세요
+          </p>
+        </div>
+      )}
     </div>
   )
 }
