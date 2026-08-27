@@ -22,7 +22,12 @@ interface Props {
 }
 
 const TYPES: QuizType[] = ['text', 'choice', 'mission']
-const MISSION_SUBTYPES: MissionSubtype[] = ['video', 'photo', 'verify']
+const MISSION_SUBTYPES: MissionSubtype[] = [
+  'video',
+  'photo',
+  'verify',
+  'photo_with_text',
+]
 
 interface FormState {
   order_num: number

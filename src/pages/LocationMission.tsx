@@ -169,6 +169,24 @@ export default function LocationMission() {
             ))}
           </ul>
         )}
+
+        {/* 하단 네비게이션 */}
+        <div className="mt-8 mb-8 flex gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/lobby')}
+            className="flex-1 py-3 rounded-2xl border-2 border-text-dark/20 text-text-dark text-sm font-bold hover:bg-white active:scale-[0.99] transition-all"
+          >
+            🏠 대기실로 돌아가기
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/day-select')}
+            className="flex-1 py-3 rounded-2xl border-2 border-orange-main text-orange-main text-sm font-bold hover:bg-orange-main/5 active:scale-[0.99] transition-all"
+          >
+            📅 일차 선택하기
+          </button>
+        </div>
       </main>
 
       {/* 전체 슬롯 완료 축하 모달 */}

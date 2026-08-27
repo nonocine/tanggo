@@ -1,5 +1,5 @@
 export type QuizType = 'text' | 'choice' | 'mission'
-export type MissionSubtype = 'video' | 'photo' | 'verify'
+export type MissionSubtype = 'video' | 'photo' | 'verify' | 'photo_with_text'
 
 export interface ReferenceImage {
   label: string
@@ -69,18 +69,21 @@ export const MISSION_SUBTYPE_LABEL: Record<MissionSubtype, string> = {
   video: '영상 업로드',
   photo: '사진 업로드',
   verify: '직접 인증',
+  photo_with_text: '사진 + 이름',
 }
 
 export const MISSION_SUBTYPE_SHORT: Record<MissionSubtype, string> = {
   video: '영상',
   photo: '사진',
   verify: '인증',
+  photo_with_text: '사진+이름',
 }
 
 export const MISSION_SUBTYPE_EMOJI: Record<MissionSubtype, string> = {
   video: '📹',
   photo: '📷',
   verify: '✋',
+  photo_with_text: '🏺',
 }
 
 export function missionTypeLabel(q: Pick<Quiz, 'type' | 'mission_subtype'>): string {

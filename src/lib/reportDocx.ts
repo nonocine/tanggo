@@ -341,6 +341,7 @@ function typeLabel(
     if (sub === 'video') return '현장(영상)'
     if (sub === 'photo') return '현장(사진)'
     if (sub === 'verify') return '현장(인증)'
+    if (sub === 'photo_with_text') return '현장(사진+이름)'
     return '현장'
   }
   return t

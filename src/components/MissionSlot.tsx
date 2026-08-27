@@ -189,6 +189,8 @@ export default function MissionSlot({
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null)
   const [resubmit, setResubmit] = useState(false)
+  // photo_with_text — 사진과 함께 제출하는 유물 이름
+  const [artifactName, setArtifactName] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -198,7 +200,10 @@ export default function MissionSlot({
   }, [mediaPreviewUrl])
 
   const subtype = quiz.type === 'mission' ? quiz.mission_subtype : null
-  const isUploadKind = subtype === 'video' || subtype === 'photo'
+  // 사진 + 유물 이름을 함께 제출하는 슬롯
+  const isPhotoWithText = subtype === 'photo_with_text'
+  const isUploadKind =
+    subtype === 'video' || subtype === 'photo' || isPhotoWithText
   const refImages = quiz.reference_images ?? []
 
   const status = existingRequest?.status ?? null
@@ -237,6 +242,11 @@ export default function MissionSlot({
     let mediaUrl: string | null = null
     let mediaType: 'video' | 'photo' | null = null
 
+    if (isPhotoWithText && !artifactName.trim()) {
+      setError('유물 이름을 입력해주세요')
+      return
+    }
+
     if (isUploadKind) {
       if (!mediaFile) {
         setError(
@@ -248,7 +258,8 @@ export default function MissionSlot({
       try {
         const res = await uploadMissionMedia(mediaFile, teamId, quiz.id)
         mediaUrl = res.url
-        mediaType = subtype
+        // media_type 컬럼은 video/photo 만 허용 — photo_with_text 도 사진으로 저장
+        mediaType = isPhotoWithText ? 'photo' : subtype
       } catch (e) {
         setError(
           `업로드 실패. 다시 시도해주세요${
@@ -270,7 +281,9 @@ export default function MissionSlot({
         status: 'pending',
         media_url: mediaUrl,
         media_type: mediaType,
-        slot_label: slotLabelOf(quiz),
+        // 승인 화면에서 어떤 유물인지 바로 보이도록 유물 이름을 슬롯 이름으로 쓴다
+        slot_label: isPhotoWithText ? artifactName.trim() : slotLabelOf(quiz),
+        note: isPhotoWithText ? artifactName.trim() : null,
       })
     setSubmitting(false)
     if (insertErr) {
@@ -278,6 +291,7 @@ export default function MissionSlot({
       return
     }
     clearMedia()
+    setArtifactName('')
     setResubmit(false)
     onChanged?.()
   }
@@ -321,9 +335,10 @@ export default function MissionSlot({
     )
   }
 
-  const showUploader = isUploadKind && (!status || (rejected && resubmit))
-  const showVerifyButton =
-    subtype === 'verify' && (!status || (rejected && resubmit))
+  const editable = !status || (rejected && resubmit)
+  const showUploader = (subtype === 'video' || subtype === 'photo') && editable
+  const showPhotoWithText = isPhotoWithText && editable
+  const showVerifyButton = subtype === 'verify' && editable
 
   return (
     <li className="rounded-2xl border border-text-dark/10 bg-white p-4">
@@ -380,6 +395,25 @@ export default function MissionSlot({
               <p className="mt-0.5 text-xs text-text-dark/60">
                 운영자 확인이 끝났어요. 다음 미션으로 진행하세요!
               </p>
+            </div>
+          )}
+
+          {isPhotoWithText && !editable && existingRequest?.slot_label && (
+            <div className="mt-3 p-3 rounded-xl bg-text-dark/5">
+              <p className="text-sm font-bold text-text-dark/60">
+                🔒 제출한 유물 이름
+              </p>
+              <p className="mt-0.5 text-sm font-bold text-text-dark">
+                🏺 {existingRequest.slot_label}
+              </p>
+              {existingRequest.media_url && (
+                <img
+                  src={existingRequest.media_url}
+                  alt="제출한 유물 사진"
+                  loading="lazy"
+                  className="mt-2 w-full rounded-lg bg-black max-h-60 object-contain"
+                />
+              )}
             </div>
           )}
 
@@ -503,6 +537,110 @@ export default function MissionSlot({
                   : submitting
                     ? '제출 중...'
                     : '📡 업로드 후 제출'}
+              </button>
+            </div>
+          )}
+
+          {showPhotoWithText && (
+            <div className="mt-3 space-y-3">
+              {/* 사진 업로드 */}
+              <div>
+                <p className="text-sm font-bold text-text-dark mb-2">
+                  📷 유물 사진
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={onFilePicked}
+                />
+                {!mediaFile ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full py-3.5 rounded-xl border-2 border-dashed border-orange-main/50 bg-orange-main/5 text-orange-main text-sm font-bold hover:bg-orange-main/10 active:scale-[0.99] transition-all"
+                  >
+                    📷 사진 찍기 / 갤러리에서 선택
+                  </button>
+                ) : (
+                  <div className="rounded-xl bg-cream p-3">
+                    {mediaPreviewUrl && (
+                      <img
+                        src={mediaPreviewUrl}
+                        alt="선택한 사진 미리보기"
+                        className="w-full rounded-lg bg-black max-h-60 object-contain"
+                      />
+                    )}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-text-dark truncate">
+                          {mediaFile.name}
+                        </p>
+                        <p className="text-[11px] text-text-dark/60 tabular-nums">
+                          {formatBytes(mediaFile.size)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={clearMedia}
+                        disabled={uploading}
+                        className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border border-text-dark/15 hover:bg-white text-text-dark/70 disabled:opacity-50"
+                      >
+                        다시 선택
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 유물 이름 입력 */}
+              <div>
+                <p className="text-sm font-bold text-text-dark mb-2">
+                  ✏️ 유물 이름
+                </p>
+                <input
+                  type="text"
+                  placeholder="유물 이름을 입력해주세요"
+                  value={artifactName}
+                  onChange={(e) => setArtifactName(e.target.value)}
+                  disabled={uploading || submitting}
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-text-dark/20 bg-white text-sm font-medium text-text-dark placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20 disabled:opacity-50"
+                />
+              </div>
+
+              {uploading && (
+                <div className="p-3 rounded-xl bg-orange-main/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full border-2 border-orange-main border-t-transparent animate-spin" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-orange-main">
+                        업로드 중...
+                      </p>
+                      <p className="text-[11px] text-text-dark/60">
+                        잠시만 기다려주세요. 화면을 닫지 마세요.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 제출 버튼 */}
+              <button
+                type="button"
+                onClick={handleMissionSubmit}
+                disabled={
+                  !mediaFile || !artifactName.trim() || submitting || uploading
+                }
+                className="w-full py-3 rounded-2xl bg-orange-main text-white text-sm font-bold hover:bg-orange-sub active:scale-[0.99] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-orange-main"
+              >
+                {uploading
+                  ? '업로드 중...'
+                  : submitting
+                    ? '제출 중...'
+                    : '제출하기'}
               </button>
             </div>
           )}

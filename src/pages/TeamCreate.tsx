@@ -146,6 +146,30 @@ export default function TeamCreate() {
       return
     }
 
+    // 행사가 이미 시작된 뒤에 만들어진 팀은 관리자가 [행사 시작]을 다시 누르지 않아도
+    // 바로 미션을 진행할 수 있도록 started_at 을 즉시 채워준다.
+    // (행사 시작 = 대기 중이던 모든 팀의 started_at 일괄 설정 → 시작된 팀이 하나라도 있으면 진행 중)
+    const [startedRes, configRes] = await Promise.all([
+      supabase
+        .from('tanggo_teams')
+        .select('id')
+        .not('started_at', 'is', null)
+        .limit(1),
+      supabase
+        .from('tanggo_event_config')
+        .select('service_ended')
+        .eq('id', 1)
+        .maybeSingle(),
+    ])
+    const eventRunning =
+      (startedRes.data?.length ?? 0) > 0 && !configRes.data?.service_ended
+    if (eventRunning) {
+      await supabase
+        .from('tanggo_teams')
+        .update({ started_at: new Date().toISOString() })
+        .eq('id', team.id)
+    }
+
     setTeam(team.id, team.team_name, leaderName)
     navigate('/lobby')
   }

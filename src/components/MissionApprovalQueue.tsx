@@ -22,7 +22,7 @@ export interface MissionRequest {
     order_num: number
     question: string
     location_hint: string | null
-    mission_subtype: 'video' | 'photo' | 'verify' | null
+    mission_subtype: 'video' | 'photo' | 'verify' | 'photo_with_text' | null
   } | null
 }
 

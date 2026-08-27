@@ -233,13 +233,21 @@ export default function LocationSelect() {
           </div>
         )}
 
-        <div className="mt-8 flex justify-center">
+        {/* 하단 네비게이션 */}
+        <div className="mt-8 mb-8 flex gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/lobby')}
+            className="flex-1 py-3 rounded-2xl border-2 border-text-dark/20 text-text-dark text-sm font-bold hover:bg-white active:scale-[0.99] transition-all"
+          >
+            🏠 대기실로 돌아가기
+          </button>
           <button
             type="button"
             onClick={() => navigate('/day-select')}
-            className="text-xs font-semibold text-text-dark/40 hover:text-orange-main underline"
+            className="flex-1 py-3 rounded-2xl border-2 border-orange-main text-orange-main text-sm font-bold hover:bg-orange-main/5 active:scale-[0.99] transition-all"
           >
-            ← 일차 선택으로 돌아가기
+            📅 일차 선택하기
           </button>
         </div>
       </main>

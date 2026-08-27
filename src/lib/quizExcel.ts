@@ -39,15 +39,19 @@ const SUBTYPE_FROM_KOR: Record<string, MissionSubtype> = {
   '영상 업로드': 'video',
   '사진 업로드': 'photo',
   '직접 인증': 'verify',
+  '사진+이름': 'photo_with_text',
+  '사진 + 이름': 'photo_with_text',
   video: 'video',
   photo: 'photo',
   verify: 'verify',
+  photo_with_text: 'photo_with_text',
 }
 
 const SUBTYPE_TO_KOR: Record<MissionSubtype, string> = {
   video: '영상',
   photo: '사진',
   verify: '인증',
+  photo_with_text: '사진+이름',
 }
 
 interface ParseResult {

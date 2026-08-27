@@ -144,11 +144,20 @@ export default function Mission() {
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
-    const quizQuery = supabase
+    let quizQuery = supabase
       .from('tanggo_quizzes')
       .select('*')
       .eq('is_active', true)
-    if (dayNumber !== null) quizQuery.eq('day_number', dayNumber)
+    if (dayNumber === 1) {
+      // 1일차 = 기존 탐GO 미션. Phase 2 이전에 등록된 문항은 day_number 가 null 이라
+      // day_number=1 로만 거르면 한 건도 안 잡힌다 (→ "등록된 미션이 없어요" 버그)
+      quizQuery = quizQuery.or('day_number.eq.1,day_number.is.null')
+    } else if (dayNumber !== null) {
+      quizQuery = quizQuery.eq('day_number', dayNumber)
+    } else {
+      // day 파라미터 없음 = 기존 탐GO single 모드: day_number 가 null 인 것만
+      quizQuery = quizQuery.is('day_number', null)
+    }
 
     const [
       quizzesRes,
@@ -457,7 +466,27 @@ export default function Mission() {
           </div>
         )}
 
-        <div className="mt-8 flex justify-center">
+        {/* 하단 네비게이션 */}
+        <div className="mt-8 flex gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/lobby')}
+            className="flex-1 py-3 rounded-2xl border-2 border-text-dark/20 text-text-dark text-sm font-bold hover:bg-white active:scale-[0.99] transition-all"
+          >
+            🏠 대기실로 돌아가기
+          </button>
+          {dayNumber !== null && (
+          <button
+            type="button"
+            onClick={() => navigate('/day-select')}
+            className="flex-1 py-3 rounded-2xl border-2 border-orange-main text-orange-main text-sm font-bold hover:bg-orange-main/5 active:scale-[0.99] transition-all"
+          >
+            📅 일차 선택하기
+          </button>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-center">
           <button
             type="button"
             onClick={handleQuit}
