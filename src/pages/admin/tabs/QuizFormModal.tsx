@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import type {
   MissionSubtype,
@@ -12,6 +12,7 @@ import {
   QUIZ_TYPE_EMOJI,
   QUIZ_TYPE_LABEL,
 } from '../../../lib/quizTypes'
+import { uploadReferenceImage } from '../../../lib/missionMedia'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -28,6 +29,21 @@ const MISSION_SUBTYPES: MissionSubtype[] = [
   'verify',
   'photo_with_text',
 ]
+
+interface RefImage {
+  id: string
+  label: string
+  url: string
+  file?: File
+  uploading?: boolean
+  error?: string
+}
+
+let refImageSeq = 0
+function nextRefImageId(): string {
+  refImageSeq += 1
+  return `ref-${Date.now()}-${refImageSeq}`
+}
 
 interface FormState {
   order_num: number
@@ -90,6 +106,17 @@ export default function QuizFormModal(props: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 📎 참고 이미지 — 기존 퀴즈 수정 시 저장된 reference_images 를 그대로 불러온다
+  const [refImages, setRefImages] = useState<RefImage[]>(() =>
+    (props.mode === 'edit' ? props.quiz?.reference_images ?? [] : []).map((r) => ({
+      id: nextRefImageId(),
+      label: r.label ?? '',
+      url: r.url,
+    })),
+  )
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const previewUrlsRef = useRef<string[]>([])
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
@@ -97,6 +124,69 @@ export default function QuizFormModal(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // 로컬 미리보기용 objectURL 정리
+  useEffect(
+    () => () => {
+      for (const u of previewUrlsRef.current) URL.revokeObjectURL(u)
+    },
+    [],
+  )
+
+  const refUploading = refImages.some((r) => r.uploading)
+
+  async function handlePickFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const picked = Array.from(files)
+    const entries: RefImage[] = picked.map((file) => {
+      const preview = URL.createObjectURL(file)
+      previewUrlsRef.current.push(preview)
+      return {
+        id: nextRefImageId(),
+        label: '',
+        url: preview,
+        file,
+        uploading: true,
+      }
+    })
+    setRefImages((prev) => [...prev, ...entries])
+
+    const targetQuizId = quiz?.id ?? 'new'
+    await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          const url = await uploadReferenceImage(entry.file as File, targetQuizId)
+          setRefImages((prev) =>
+            prev.map((r) =>
+              r.id === entry.id
+                ? { ...r, url, file: undefined, uploading: false, error: undefined }
+                : r,
+            ),
+          )
+        } catch (e) {
+          setRefImages((prev) =>
+            prev.map((r) =>
+              r.id === entry.id
+                ? {
+                    ...r,
+                    uploading: false,
+                    error: e instanceof Error ? e.message : '업로드 실패',
+                  }
+                : r,
+            ),
+          )
+        }
+      }),
+    )
+  }
+
+  function setRefLabel(id: string, label: string) {
+    setRefImages((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)))
+  }
+
+  function removeRefImage(id: string) {
+    setRefImages((prev) => prev.filter((r) => r.id !== id))
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -143,13 +233,19 @@ export default function QuizFormModal(props: Props) {
         return '객관식 정답을 선택해 주세요'
       }
     }
+    if (refUploading) return '참고 이미지 업로드가 끝나면 저장할 수 있어요'
     return null
-  }, [form])
+  }, [form, refUploading])
 
   async function handleSubmit() {
     if (validation || submitting) return
     setSubmitting(true)
     setError(null)
+
+    // 업로드에 실패한 항목은 저장하지 않는다 (로컬 objectURL 이 새어 나가지 않도록)
+    const savedRefImages = refImages
+      .filter((r) => !r.error && !r.uploading)
+      .map((r) => ({ label: r.label.trim(), url: r.url }))
 
     const payload: QuizInput = {
       order_num: form.order_num,
@@ -170,6 +266,7 @@ export default function QuizFormModal(props: Props) {
           : null,
       hint: form.hint.trim() || null,
       is_active: quiz?.is_active ?? true,
+      reference_images: savedRefImages.length > 0 ? savedRefImages : null,
     }
 
     let dbError: { message: string } | null = null
@@ -429,6 +526,90 @@ export default function QuizFormModal(props: Props) {
               </div>
             </div>
           )}
+
+          {/* 참고 이미지 */}
+          <div>
+            <label className="text-xs font-bold text-text-dark">
+              📎 참고 이미지{' '}
+              <span className="text-text-dark/40 font-medium">(선택)</span>
+            </label>
+            <p className="mt-0.5 text-[11px] text-text-dark/50">
+              미션 화면에 표시할 참고 이미지를 업로드하세요
+            </p>
+
+            {refImages.length > 0 && (
+              <div className="mt-2 flex flex-col gap-2">
+                {refImages.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center gap-2.5 p-2 rounded-xl border-2 border-text-dark/10 bg-cream/40"
+                  >
+                    <div className="relative w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-white border border-text-dark/10">
+                      <img
+                        src={r.url}
+                        alt={r.label || '참고 이미지'}
+                        className="w-full h-full object-cover"
+                      />
+                      {r.uploading && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-white/70">
+                          <span
+                            aria-hidden
+                            className="w-4 h-4 rounded-full border-2 border-orange-main/30 border-t-orange-main animate-spin"
+                          />
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={r.label}
+                        onChange={(e) => setRefLabel(r.id, e.target.value)}
+                        placeholder="예: A. 덩이쇠"
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-text-dark/10 bg-white text-sm font-medium placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main"
+                      />
+                      {r.uploading && (
+                        <p className="mt-1 text-[11px] font-semibold text-text-dark/45">
+                          업로드 중...
+                        </p>
+                      )}
+                      {r.error && (
+                        <p className="mt-1 text-[11px] font-semibold text-[#E94B3C]">
+                          업로드 실패: {r.error}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeRefImage(r.id)}
+                      aria-label="참고 이미지 삭제"
+                      className="w-8 h-8 shrink-0 inline-flex items-center justify-center rounded-full text-text-dark/40 hover:bg-white hover:text-[#E94B3C] text-lg"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                handlePickFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-2 px-3.5 py-2 rounded-xl bg-orange-main/10 text-orange-main text-xs font-bold hover:bg-orange-main/20"
+            >
+              이미지 추가 +
+            </button>
+          </div>
 
           {/* 힌트 */}
           <div>

@@ -44,3 +44,25 @@ export async function uploadMissionMedia(
   const { data } = supabase.storage.from(MISSION_MEDIA_BUCKET).getPublicUrl(path)
   return { url: data.publicUrl, path }
 }
+
+/**
+ * 관리자가 퀴즈에 첨부하는 참고 이미지 업로드.
+ * 미션 화면에서 "A. 덩이쇠" 처럼 레이블과 함께 보여 준다.
+ */
+export async function uploadReferenceImage(
+  file: File,
+  quizId: string,
+): Promise<string> {
+  const ext = extOf(file)
+  const path = `reference/${quizId}/${Date.now()}.${ext}`
+  const { error } = await supabase.storage
+    .from(MISSION_MEDIA_BUCKET)
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type || undefined,
+    })
+  if (error) throw error
+  const { data } = supabase.storage.from(MISSION_MEDIA_BUCKET).getPublicUrl(path)
+  return data.publicUrl
+}
