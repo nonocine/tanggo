@@ -8,6 +8,7 @@ import LocationAssign from './tabs/LocationAssign'
 import GameProgress from './tabs/GameProgress'
 import EventSettings from './tabs/EventSettings'
 import MissionApproval from './tabs/MissionApproval'
+import ResultGallery from './tabs/ResultGallery'
 import SurveyManager from './tabs/SurveyManager'
 import ReportManager from './tabs/ReportManager'
 import DataManager from './tabs/DataManager'
@@ -19,6 +20,7 @@ type TabKey =
   | 'location-assign'
   | 'progress'
   | 'approvals'
+  | 'result-gallery'
   | 'results'
   | 'settings'
   | 'text'
@@ -39,6 +41,12 @@ const TABS: TabDef[] = [
   { key: 'location-assign', icon: '📍', label: '장소 배정', shortLabel: '장소' },
   { key: 'progress', icon: '🎮', label: '게임 진행 상황', shortLabel: '진행' },
   { key: 'approvals', icon: '✋', label: '미션 승인', shortLabel: '승인' },
+  {
+    key: 'result-gallery',
+    icon: '🖼️',
+    label: '결과물 갤러리',
+    shortLabel: '갤러리',
+  },
   { key: 'results', icon: '🏆', label: '순위/결과' },
   { key: 'settings', icon: '⚙', label: '행사 설정', shortLabel: '설정' },
   { key: 'text', icon: '💬', label: '문구 관리' },
@@ -161,6 +169,7 @@ export default function AdminDashboard() {
           {currentTab === 'progress' && <GameProgress />}
           {currentTab === 'settings' && <EventSettings />}
           {currentTab === 'approvals' && <MissionApproval />}
+          {currentTab === 'result-gallery' && <ResultGallery />}
           {currentTab === 'text' && <TextManager />}
           {currentTab === 'survey' && <SurveyManager />}
           {currentTab === 'reports' && <ReportManager />}
@@ -171,6 +180,7 @@ export default function AdminDashboard() {
             currentTab !== 'progress' &&
             currentTab !== 'settings' &&
             currentTab !== 'approvals' &&
+            currentTab !== 'result-gallery' &&
             currentTab !== 'text' &&
             currentTab !== 'survey' &&
             currentTab !== 'reports' &&
