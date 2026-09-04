@@ -987,7 +987,6 @@ function QuizSolveModal({
                     ref={fileInputRef}
                     type="file"
                     accept={missionSubtype === 'video' ? 'video/*' : 'image/*'}
-                    capture="environment"
                     className="hidden"
                     onChange={onFilePicked}
                   />

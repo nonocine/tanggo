@@ -452,7 +452,6 @@ export default function MissionSlot({
                 ref={fileInputRef}
                 type="file"
                 accept={subtype === 'video' ? 'video/*' : 'image/*'}
-                capture="environment"
                 className="hidden"
                 onChange={onFilePicked}
               />
@@ -552,7 +551,6 @@ export default function MissionSlot({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                   onChange={onFilePicked}
                 />
