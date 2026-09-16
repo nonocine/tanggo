@@ -31,6 +31,18 @@ const FALLBACK_META: Record<
       '팀을 만들어 학교 곳곳에 숨겨진 미션을 찾고\n가장 빠르게 풀어 1등을 차지하세요!',
     category: 'landing',
   },
+  dayselect_title: {
+    label: '일차 선택 제목',
+    description: '일차 선택 화면 상단 큰 글씨.',
+    placeholder: '어떤 일차를 진행할까요?',
+    category: 'dayselect',
+  },
+  dayselect_subtitle: {
+    label: '일차 선택 부제',
+    description: '일차 선택 화면 제목 아래 안내 문구.',
+    placeholder: '운영자 안내에 맞는 일차를 선택해 주세요',
+    category: 'dayselect',
+  },
   lobby_waiting_message: {
     label: '대기 중 안내',
     description: '대기실에서 행사 시작을 기다릴 때 보여줄 문구.',
@@ -78,12 +90,13 @@ const FALLBACK_META: Record<
 
 const CATEGORY_INFO: Record<string, { icon: string; label: string }> = {
   landing: { icon: '📍', label: '시작 화면 (Landing)' },
+  dayselect: { icon: '📅', label: '일차 선택 화면' },
   lobby: { icon: '🏃', label: '대기실 (Lobby)' },
   result: { icon: '🏁', label: '결과 화면 (Result)' },
   survey: { icon: '📝', label: '설문 (Survey)' },
 }
 
-const CATEGORY_ORDER = ['landing', 'lobby', 'result', 'survey']
+const CATEGORY_ORDER = ['landing', 'dayselect', 'lobby', 'result', 'survey']
 
 function metaOf(row: TextRow) {
   const fb = FALLBACK_META[row.id]

@@ -5,11 +5,18 @@ import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import type { DayDef } from '../lib/eventDays'
 import { dayEmoji, normalizeDayNumber, parseDays } from '../lib/eventDays'
+import { useText } from '../lib/useTextContent'
 
 export default function DaySelect() {
   const navigate = useNavigate()
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+
+  const title = useText('dayselect_title', '어떤 일차를 진행할까요?')
+  const subtitle = useText(
+    'dayselect_subtitle',
+    '운영자 안내에 맞는 일차를 선택해 주세요',
+  )
 
   const [days, setDays] = useState<DayDef[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,11 +119,11 @@ export default function DaySelect() {
 
       <main className="flex-1 mx-auto w-full max-w-md px-5 py-4 flex flex-col">
         <div className="text-center">
-          <h1 className="text-2xl font-black text-text-dark">
-            어떤 일차를 진행할까요?
+          <h1 className="text-2xl font-black text-text-dark whitespace-pre-line">
+            {title}
           </h1>
-          <p className="mt-1.5 text-sm text-text-dark/60">
-            운영자 안내에 맞는 일차를 선택해 주세요
+          <p className="mt-1.5 text-sm text-text-dark/60 whitespace-pre-line">
+            {subtitle}
           </p>
         </div>
 
@@ -158,7 +165,7 @@ export default function DaySelect() {
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-5xl shrink-0" aria-hidden>
-                        {dayEmoji(d.day)}
+                        {dayEmoji(d)}
                       </span>
                       <div className="min-w-0">
                         <p className="text-xl font-black text-text-dark">

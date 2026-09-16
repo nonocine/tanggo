@@ -5,6 +5,8 @@ export interface DayDef {
   desc: string
   /** true = 배정된 장소만 입장 가능 / false = 장소 구분 없이 전체 미션 진행 */
   use_location_assign: boolean
+  /** 일차 선택 화면 카드 아이콘. 비어 있으면 순서대로 기본값이 붙는다 */
+  emoji?: string
 }
 
 export const MAX_EVENT_DAYS = 7
@@ -31,6 +33,9 @@ export function parseDays(raw: unknown): DayDef[] {
       label: typeof rec.label === 'string' ? rec.label : `${day}일차`,
       desc: typeof rec.desc === 'string' ? rec.desc : '',
       use_location_assign: rec.use_location_assign === true,
+      ...(typeof rec.emoji === 'string' && rec.emoji
+        ? { emoji: rec.emoji }
+        : {}),
     })
   }
   if (parsed.length === 0) return DEFAULT_DAYS
@@ -53,9 +58,27 @@ export function normalizeDayNumber(raw: number | null | undefined): number {
   return raw == null ? 1 : raw
 }
 
-const DAY_EMOJIS = ['📅', '🗺️', '🧭', '🎒', '🚩', '🌟', '🏁']
+const DAY_EMOJIS = ['📅', '🗺️', '🎯', '🚩']
 
-export function dayEmoji(day: number): string {
-  if (!Number.isFinite(day) || day < 1) return '📌'
-  return DAY_EMOJIS[(Math.floor(day) - 1) % DAY_EMOJIS.length]
+/** 관리자 아이콘 선택 UI 후보 */
+export const DAY_EMOJI_CHOICES = [
+  '📅',
+  '🗺️',
+  '🏛️',
+  '🎯',
+  '🚩',
+  '🏃',
+  '🎨',
+  '🎪',
+  '⛰️',
+  '🌊',
+  '🏙️',
+  '🎒',
+]
+
+/** 관리자가 고른 아이콘이 있으면 그 값, 없으면 일차 순서대로 순환하는 기본값 */
+export function dayEmoji(d: DayDef): string {
+  if (d.emoji) return d.emoji
+  if (!Number.isFinite(d.day) || d.day < 1) return '📌'
+  return DAY_EMOJIS[(Math.floor(d.day) - 1) % DAY_EMOJIS.length]
 }

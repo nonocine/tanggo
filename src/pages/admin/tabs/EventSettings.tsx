@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
 import type { DayDef } from '../../../lib/eventDays'
-import { MAX_EVENT_DAYS, parseDays, resizeDays } from '../../../lib/eventDays'
+import {
+  DAY_EMOJI_CHOICES,
+  MAX_EVENT_DAYS,
+  dayEmoji,
+  parseDays,
+  resizeDays,
+} from '../../../lib/eventDays'
 
 const POLL_INTERVAL_MS = 30_000
 
@@ -75,6 +81,8 @@ function normalizeDays(days: DayDef[]): DayDef[] {
     label: d.label.trim() || `${i + 1}일차`,
     desc: d.desc.trim(),
     use_location_assign: d.use_location_assign,
+    // 아이콘 미선택이면 필드를 비워 둬서 순서대로 붙는 기본값을 쓰게 한다
+    ...(d.emoji ? { emoji: d.emoji } : {}),
   }))
 }
 
@@ -514,7 +522,45 @@ export default function EventSettings() {
               className="rounded-2xl border-2 border-text-dark/10 px-4 py-3.5"
             >
               <p className="text-xs font-black text-orange-main">{i + 1}일차</p>
-              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="mt-2">
+                <Field
+                  label="아이콘"
+                  help="일차 선택 화면 카드에 크게 표시돼요. 고르지 않으면 순서대로 기본 아이콘이 붙어요"
+                >
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAY_EMOJI_CHOICES.map((emoji) => {
+                      const selected = d.emoji === emoji
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          aria-pressed={selected}
+                          aria-label={`${i + 1}일차 아이콘 ${emoji}`}
+                          onClick={() =>
+                            setDayField(i, 'emoji', selected ? undefined : emoji)
+                          }
+                          className={`w-10 h-10 rounded-xl border-2 text-xl transition-colors ${
+                            selected
+                              ? 'border-orange-main bg-orange-main/10'
+                              : 'border-text-dark/10 bg-white hover:border-orange-main/50'
+                          }`}
+                        >
+                          <span aria-hidden>{emoji}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-text-dark/50">
+                    현재 표시:{' '}
+                    <span className="text-base align-middle" aria-hidden>
+                      {dayEmoji({ ...d, day: i + 1 })}
+                    </span>{' '}
+                    {d.emoji ? '(직접 선택)' : '(기본값)'}
+                  </p>
+                </Field>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Field label="일차 라벨">
                   <input
                     type="text"
