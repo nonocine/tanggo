@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import type { DayDef } from '../../../lib/eventDays'
+import { MAX_EVENT_DAYS, parseDays, resizeDays } from '../../../lib/eventDays'
 
 const POLL_INTERVAL_MS = 30_000
 
@@ -14,6 +16,8 @@ interface EventConfig {
   announcement_updated_at: string | null
   service_ended: boolean
   target_teams: number | null
+  event_mode: 'single' | 'multi_day'
+  days: unknown
 }
 
 function pad(n: number): string {
@@ -48,6 +52,7 @@ interface FormState {
   targetTeams: string
   announcementTitle: string
   announcementBody: string
+  days: DayDef[]
 }
 
 function configToForm(c: EventConfig): FormState {
@@ -59,7 +64,18 @@ function configToForm(c: EventConfig): FormState {
     targetTeams: c.target_teams != null ? String(c.target_teams) : '',
     announcementTitle: c.announcement_title ?? '',
     announcementBody: c.announcement_body ?? '',
+    days: parseDays(c.days),
   }
+}
+
+/** 저장 직전 정규화 — day 번호 재부여 + 빈 라벨 기본값 */
+function normalizeDays(days: DayDef[]): DayDef[] {
+  return days.map((d, i) => ({
+    day: i + 1,
+    label: d.label.trim() || `${i + 1}일차`,
+    desc: d.desc.trim(),
+    use_location_assign: d.use_location_assign,
+  }))
 }
 
 export default function EventSettings() {
@@ -119,6 +135,11 @@ export default function EventSettings() {
       Number(form.timeLimitMinutes) !== config.time_limit_minutes ||
       Number(form.startIntervalSeconds) !== config.start_interval_seconds)
 
+  const daysDirty =
+    !!form &&
+    !!config &&
+    JSON.stringify(form.days) !== JSON.stringify(parseDays(config.days))
+
   const targetDirty =
     !!form &&
     !!config &&
@@ -132,8 +153,8 @@ export default function EventSettings() {
       form.announcementBody !== (config.announcement_body ?? ''))
 
   useEffect(() => {
-    dirtyRef.current = timingDirty || targetDirty || announcementDirty
-  }, [timingDirty, targetDirty, announcementDirty])
+    dirtyRef.current = timingDirty || daysDirty || targetDirty || announcementDirty
+  }, [timingDirty, daysDirty, targetDirty, announcementDirty])
 
   async function updateConfig(
     section: string,
@@ -176,6 +197,56 @@ export default function EventSettings() {
         start_interval_seconds: startInterval,
       },
       '⏱ 행사 시간을 저장했어요',
+    )
+  }
+
+  /** 일수 증감 — 줄일 때는 사라질 일차를 알리고 확인받는다 */
+  function changeDayCount(next: number) {
+    if (!form) return
+    const clamped = Math.max(1, Math.min(MAX_EVENT_DAYS, Math.floor(next)))
+    if (!Number.isFinite(clamped) || clamped === form.days.length) return
+    if (clamped < form.days.length) {
+      const removed = form.days
+        .slice(clamped)
+        .map((d) => d.label.trim() || `${d.day}일차`)
+      const ok = window.confirm(
+        `${removed.join(', ')} 설정이 삭제됩니다. 계속할까요?`,
+      )
+      if (!ok) return
+    }
+    setForm((prev) =>
+      prev ? { ...prev, days: resizeDays(prev.days, clamped) } : prev,
+    )
+  }
+
+  function setDayField<K extends keyof DayDef>(
+    index: number,
+    key: K,
+    value: DayDef[K],
+  ) {
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            days: prev.days.map((d, i) =>
+              i === index ? { ...d, [key]: value } : d,
+            ),
+          }
+        : prev,
+    )
+  }
+
+  async function saveDays() {
+    if (!form) return
+    const cleaned = normalizeDays(form.days)
+    await updateConfig(
+      'days',
+      {
+        days: cleaned,
+        // 1일 행사는 일차 선택 화면 없이 바로 미션으로 보낸다
+        event_mode: cleaned.length === 1 ? 'single' : 'multi_day',
+      },
+      '🗓 행사 일수를 저장했어요',
     )
   }
 
@@ -382,7 +453,124 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 2: 목표 팀 수 */}
+      {/* 섹션 2: 행사 일수 */}
+      <SectionCard
+        icon="🗓"
+        title="행사 일수"
+        dirty={daysDirty}
+        subtitle="일수를 바꾸면 참가자의 일차 선택 화면이 함께 바뀝니다"
+        action={
+          <button
+            type="button"
+            onClick={saveDays}
+            disabled={!daysDirty || savingSection === 'days'}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+              !daysDirty
+                ? 'bg-text-dark/10 text-text-dark/40 cursor-not-allowed'
+                : 'bg-orange-main text-white hover:bg-orange-sub'
+            }`}
+          >
+            {savingSection === 'days' ? '저장 중...' : '저장'}
+          </button>
+        }
+      >
+        <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-text-dark/10 bg-cream px-4 py-3">
+          <div>
+            <p className="text-sm font-bold text-text-dark">총 일수</p>
+            <p className="mt-0.5 text-[11px] text-text-dark/50">
+              1~{MAX_EVENT_DAYS}일 · 1일이면 일차 선택 없이 바로 미션으로
+              이동해요
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              aria-label="일수 줄이기"
+              onClick={() => changeDayCount(form.days.length - 1)}
+              disabled={form.days.length <= 1}
+              className="w-10 h-10 rounded-xl border-2 border-text-dark/15 bg-white text-xl font-black text-text-dark/70 hover:border-orange-main hover:text-orange-main disabled:opacity-30 disabled:hover:border-text-dark/15 disabled:hover:text-text-dark/70"
+            >
+              −
+            </button>
+            <span className="w-12 text-center text-2xl font-black text-orange-main tabular-nums">
+              {form.days.length}
+            </span>
+            <button
+              type="button"
+              aria-label="일수 늘리기"
+              onClick={() => changeDayCount(form.days.length + 1)}
+              disabled={form.days.length >= MAX_EVENT_DAYS}
+              className="w-10 h-10 rounded-xl border-2 border-text-dark/15 bg-white text-xl font-black text-text-dark/70 hover:border-orange-main hover:text-orange-main disabled:opacity-30 disabled:hover:border-text-dark/15 disabled:hover:text-text-dark/70"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3">
+          {form.days.map((d, i) => (
+            <div
+              key={d.day}
+              className="rounded-2xl border-2 border-text-dark/10 px-4 py-3.5"
+            >
+              <p className="text-xs font-black text-orange-main">{i + 1}일차</p>
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field label="일차 라벨">
+                  <input
+                    type="text"
+                    value={d.label}
+                    onChange={(e) => setDayField(i, 'label', e.target.value)}
+                    placeholder={`${i + 1}일차`}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="설명 (선택)">
+                  <input
+                    type="text"
+                    value={d.desc}
+                    onChange={(e) => setDayField(i, 'desc', e.target.value)}
+                    placeholder="예: 동래 장소별 미션 수행"
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-cream px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-text-dark">
+                    장소 배정 사용
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-text-dark/60 leading-relaxed">
+                    {d.use_location_assign
+                      ? 'ON · 배정된 장소만 입장 가능 (참가자가 미배정 장소를 누르면 차단돼요)'
+                      : 'OFF · 장소 구분 없이 모든 팀이 모든 미션을 자유롭게 진행해요'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={d.use_location_assign}
+                  aria-label={`${i + 1}일차 장소 배정 사용`}
+                  onClick={() =>
+                    setDayField(i, 'use_location_assign', !d.use_location_assign)
+                  }
+                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${
+                    d.use_location_assign ? 'bg-orange-main' : 'bg-text-dark/20'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-7 w-7 transform rounded-full bg-white shadow transition-transform ${
+                      d.use_location_assign ? 'translate-x-6' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* 섹션 3: 목표 팀 수 */}
       <SectionCard
         icon="🎯"
         title="목표 팀 수"
@@ -417,7 +605,7 @@ export default function EventSettings() {
         </Field>
       </SectionCard>
 
-      {/* 섹션 3: 공지사항 */}
+      {/* 섹션 4: 공지사항 */}
       <SectionCard
         icon="📢"
         title="공지사항"
@@ -474,7 +662,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 4: 행사 제어 */}
+      {/* 섹션 5: 행사 제어 */}
       <SectionCard icon="🚦" title="행사 제어" tone="red">
         <div className="flex flex-col md:flex-row gap-2">
           <button
@@ -505,7 +693,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 5: 서비스 종료 토글 */}
+      {/* 섹션 6: 서비스 종료 토글 */}
       <SectionCard icon="🔒" title="서비스 종료 토글">
         <div className="flex items-center justify-between gap-3">
           <div>

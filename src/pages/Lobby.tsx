@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import { useText } from '../lib/useTextContent'
 import AnnouncementBanner from '../components/AnnouncementBanner'
+import { parseDays } from '../lib/eventDays'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -37,8 +38,13 @@ type LobbyState =
   | { kind: 'go'; secondsLeft: number }
 
 /** event_mode 에 따라 GO 이후 이동할 경로 */
-function missionPathFor(mode: EventMode): string {
-  return mode === 'multi_day' ? '/day-select' : '/mission'
+function missionPathFor(mode: EventMode, daysRaw: unknown): string {
+  if (mode === 'multi_day') return '/day-select'
+  // 1일 행사는 일차 선택을 건너뛰되, 그 하루가 장소 배정을 쓰면 장소 선택으로 보낸다
+  const first = parseDays(daysRaw)[0]
+  return first?.use_location_assign
+    ? `/location-select?day=${first.day}`
+    : '/mission'
 }
 
 // 단순화된 상태 머신:
@@ -128,21 +134,19 @@ export default function Lobby() {
   const eventMode: EventMode =
     config?.event_mode === 'multi_day' ? 'multi_day' : 'single'
 
+  const missionPath = missionPathFor(eventMode, config?.days)
+
   // 자동 리다이렉트
   useEffect(() => {
     if (state.kind === 'go_to_result') {
       navigate('/result', { replace: true })
     } else if (state.kind === 'go_to_mission') {
-      if (eventMode === 'multi_day') {
-        navigate('/day-select', { replace: true })
-      } else {
-        navigate('/mission', { replace: true })
-      }
+      navigate(missionPath, { replace: true })
     }
-  }, [state.kind, eventMode, navigate])
+  }, [state.kind, missionPath, navigate])
 
   function goNow() {
-    navigate(missionPathFor(eventMode), { replace: true })
+    navigate(missionPath, { replace: true })
   }
 
   return (

@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import type { DayDef } from '../../../lib/eventDays'
+import { normalizeDayNumber, parseDays } from '../../../lib/eventDays'
 
 interface TeamRow {
   id: string
   team_name: string
   start_order: number | null
   assigned_locations: unknown
+}
+
+interface QuizLocationRow {
+  day_number: number | null
+  location_group: string | null
+  location_group_order: number | null
 }
 
 interface LocationOption {
@@ -21,7 +29,9 @@ function toStringArray(raw: unknown): string[] | null {
 
 export default function LocationAssign() {
   const [teams, setTeams] = useState<TeamRow[]>([])
-  const [locations, setLocations] = useState<LocationOption[]>([])
+  const [quizRows, setQuizRows] = useState<QuizLocationRow[]>([])
+  const [assignDays, setAssignDays] = useState<DayDef[]>([])
+  const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +39,7 @@ export default function LocationAssign() {
   const [toast, setToast] = useState<string | null>(null)
 
   const fetchAll = useCallback(async () => {
-    const [teamsRes, quizzesRes] = await Promise.all([
+    const [teamsRes, quizzesRes, configRes] = await Promise.all([
       supabase
         .from('tanggo_teams')
         .select('id, team_name, start_order, assigned_locations')
@@ -37,26 +47,54 @@ export default function LocationAssign() {
         .order('created_at', { ascending: true }),
       supabase
         .from('tanggo_quizzes')
-        .select('location_group, location_group_order')
-        .eq('day_number', 2)
+        .select('day_number, location_group, location_group_order')
         .not('location_group', 'is', null),
+      supabase.from('tanggo_event_config').select('days').eq('id', 1).maybeSingle(),
     ])
 
-    if (teamsRes.error || quizzesRes.error) {
-      setError(teamsRes.error?.message ?? quizzesRes.error?.message ?? '로딩 실패')
+    if (teamsRes.error || quizzesRes.error || configRes.error) {
+      setError(
+        teamsRes.error?.message ??
+          quizzesRes.error?.message ??
+          configRes.error?.message ??
+          '로딩 실패',
+      )
       setLoading(false)
       return
     }
     setError(null)
     setTeams((teamsRes.data ?? []) as TeamRow[])
+    setQuizRows((quizzesRes.data ?? []) as QuizLocationRow[])
 
-    // DISTINCT location_group (+ 슬롯 수 집계)
+    // 장소 배정을 사용하는 일차만 노출한다
+    const usable = parseDays(configRes.data?.days).filter(
+      (d) => d.use_location_assign,
+    )
+    setAssignDays(usable)
+    setSelectedDay((prev) =>
+      prev !== null && usable.some((d) => d.day === prev)
+        ? prev
+        : (usable[0]?.day ?? null),
+    )
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchAll()
+  }, [fetchAll])
+
+  const selectedDayLabel = useMemo(
+    () => assignDays.find((d) => d.day === selectedDay)?.label ?? `${selectedDay}일차`,
+    [assignDays, selectedDay],
+  )
+
+  // 선택한 일차의 DISTINCT location_group (+ 슬롯 수 집계)
+  const locations = useMemo<LocationOption[]>(() => {
+    if (selectedDay === null) return []
     const map = new Map<string, LocationOption>()
-    for (const row of (quizzesRes.data ?? []) as {
-      location_group: string | null
-      location_group_order: number | null
-    }[]) {
+    for (const row of quizRows) {
       if (!row.location_group) continue
+      if (normalizeDayNumber(row.day_number) !== selectedDay) continue
       const prev = map.get(row.location_group)
       if (prev) {
         prev.slotCount += 1
@@ -71,17 +109,15 @@ export default function LocationAssign() {
         })
       }
     }
-    setLocations(
-      [...map.values()].sort(
-        (a, b) => a.order - b.order || a.group.localeCompare(b.group),
-      ),
+    return [...map.values()].sort(
+      (a, b) => a.order - b.order || a.group.localeCompare(b.group),
     )
-    setLoading(false)
-  }, [])
+  }, [quizRows, selectedDay])
 
-  useEffect(() => {
-    fetchAll()
-  }, [fetchAll])
+  const dayGroupSet = useMemo(
+    () => new Set(locations.map((l) => l.group)),
+    [locations],
+  )
 
   useEffect(() => {
     if (!toast) return
@@ -116,28 +152,33 @@ export default function LocationAssign() {
     setToast('저장되었습니다 ✅')
   }
 
+  /** 다른 일차에 배정된 장소는 건드리지 않는다 */
+  function otherDayGroups(current: string[]): string[] {
+    return current.filter((g) => !dayGroupSet.has(g))
+  }
+
   function toggle(group: string) {
     if (!selectedTeam) return
     const current = selectedAssigned ?? []
     const next = current.includes(group)
       ? current.filter((g) => g !== group)
       : [...current, group]
-    // 장소 순서대로 정렬해 저장
+    // 이번 일차 장소는 목록 순서대로 정렬해 저장
     const ordered = locations.map((l) => l.group).filter((g) => next.includes(g))
-    save(selectedTeam.id, ordered)
+    save(selectedTeam.id, [...otherDayGroups(current), ...ordered])
   }
 
   function assignAll() {
     if (!selectedTeam) return
-    save(
-      selectedTeam.id,
-      locations.map((l) => l.group),
-    )
+    save(selectedTeam.id, [
+      ...otherDayGroups(selectedAssigned ?? []),
+      ...locations.map((l) => l.group),
+    ])
   }
 
   function clearAll() {
     if (!selectedTeam) return
-    save(selectedTeam.id, [])
+    save(selectedTeam.id, otherDayGroups(selectedAssigned ?? []))
   }
 
   return (
@@ -152,11 +193,34 @@ export default function LocationAssign() {
       <div className="rounded-2xl bg-white border border-text-dark/10 px-4 py-3">
         <p className="text-xs font-bold text-text-dark/50">안내</p>
         <p className="mt-1 text-sm text-text-dark/70 leading-relaxed">
-          2일차 장소별 미션에서 <b>각 팀이 진행할 장소</b>를 지정합니다. 배정되지
-          않은 장소는 참가자 화면에서 🔒 로 표시되고 선택할 수 없어요. 한 곳도
+          장소별 미션에서 <b>각 팀이 진행할 장소</b>를 지정합니다. 배정되지 않은
+          장소는 참가자 화면에서 🔒 로 표시되고 선택할 수 없어요. 한 곳도
           배정하지 않으면(빈 목록) 해당 팀은 어떤 장소도 진행할 수 없습니다.
         </p>
       </div>
+
+      {/* 일차 선택 — 장소 배정을 사용하는 일차만 노출 */}
+      {!loading && !error && assignDays.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {assignDays.map((d) => {
+            const active = d.day === selectedDay
+            return (
+              <button
+                key={d.day}
+                type="button"
+                onClick={() => setSelectedDay(d.day)}
+                className={`px-3.5 py-2 rounded-xl text-sm font-bold border-2 transition-colors ${
+                  active
+                    ? 'border-orange-main bg-orange-main text-white'
+                    : 'border-text-dark/10 bg-white text-text-dark/60 hover:border-orange-main/40'
+                }`}
+              >
+                {d.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {loading ? (
         <div className="py-16 text-center text-sm text-text-dark/50">
@@ -172,6 +236,18 @@ export default function LocationAssign() {
           >
             다시 시도
           </button>
+        </div>
+      ) : assignDays.length === 0 ? (
+        <div className="mt-4 rounded-2xl bg-white border-2 border-dashed border-text-dark/15 py-16 text-center">
+          <div className="text-4xl mb-3" aria-hidden>
+            🗓
+          </div>
+          <p className="text-sm font-bold text-text-dark/60">
+            장소 배정을 사용하는 일차가 없습니다.
+          </p>
+          <p className="mt-1 text-xs text-text-dark/50">
+            행사 설정에서 토글을 켜주세요.
+          </p>
         </div>
       ) : (
         <div className="mt-4 flex flex-col lg:flex-row gap-4">
@@ -192,7 +268,10 @@ export default function LocationAssign() {
               <ul className="max-h-[60vh] overflow-y-auto">
                 {teams.map((t) => {
                   const active = t.id === selectedTeamId
-                  const list = toStringArray(t.assigned_locations)
+                  const all = toStringArray(t.assigned_locations)
+                  // 칩은 선택한 일차의 장소만 보여 준다
+                  const list =
+                    all === null ? null : all.filter((g) => dayGroupSet.has(g))
                   return (
                     <li key={t.id} className="border-b border-text-dark/5 last:border-b-0">
                       <button
@@ -246,7 +325,7 @@ export default function LocationAssign() {
           <div className="flex-1 min-w-0 rounded-2xl bg-white border border-text-dark/10 overflow-hidden">
             <div className="px-4 py-2.5 bg-cream border-b border-text-dark/10 flex items-center justify-between gap-2">
               <p className="text-xs font-bold text-text-dark/70 truncate">
-                🗺️ 장소 목록 ({locations.length})
+                🗺️ {selectedDayLabel} 장소 목록 ({locations.length})
                 {selectedTeam && (
                   <>
                     <span className="text-text-dark/30 mx-1.5">·</span>
@@ -291,10 +370,11 @@ export default function LocationAssign() {
                   📭
                 </div>
                 <p className="text-sm font-bold text-text-dark/60">
-                  2일차 장소가 없어요
+                  {selectedDayLabel} 장소가 없어요
                 </p>
                 <p className="mt-1 text-xs text-text-dark/50">
-                  미션 관리에서 day_number=2, location_group 을 지정해 주세요
+                  미션 관리에서 day_number={selectedDay}, location_group 을 지정해
+                  주세요
                 </p>
               </div>
             ) : (

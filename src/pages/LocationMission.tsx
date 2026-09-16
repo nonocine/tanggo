@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
@@ -12,12 +12,19 @@ import type { Quiz } from '../lib/quizTypes'
 
 const POLL_INTERVAL_MS = 5000
 
+/** ?day 가 없으면 기존 링크 호환을 위해 2일차로 본다 */
+const DEFAULT_DAY = 2
+
 export default function LocationMission() {
   const navigate = useNavigate()
   const params = useParams<{ locationGroup: string }>()
+  const [searchParams] = useSearchParams()
   const locationGroup = decodeURIComponent(params.locationGroup ?? '')
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+
+  const dayParam = Number(searchParams.get('day'))
+  const dayNumber = Number.isFinite(dayParam) && dayParam > 0 ? dayParam : DEFAULT_DAY
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [answersMap, setAnswersMap] = useState<Map<string, AnswerRow>>(new Map())
@@ -30,14 +37,19 @@ export default function LocationMission() {
 
   const fetchAll = useCallback(async () => {
     if (!teamId || !locationGroup) return
+    let quizQuery = supabase
+      .from('tanggo_quizzes')
+      .select('*')
+      .eq('is_active', true)
+      .eq('location_group', locationGroup)
+    // 1일차 문항은 Phase 2 이전 등록분이라 day_number 가 null 일 수 있다
+    quizQuery =
+      dayNumber === 1
+        ? quizQuery.or('day_number.eq.1,day_number.is.null')
+        : quizQuery.eq('day_number', dayNumber)
+
     const [quizzesRes, answersRes, requestsRes] = await Promise.all([
-      supabase
-        .from('tanggo_quizzes')
-        .select('*')
-        .eq('is_active', true)
-        .eq('day_number', 2)
-        .eq('location_group', locationGroup)
-        .order('slot_order', { ascending: true }),
+      quizQuery.order('slot_order', { ascending: true }),
       supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
       supabase.from('tanggo_mission_requests').select('*').eq('team_id', teamId),
     ])
@@ -60,7 +72,7 @@ export default function LocationMission() {
       latestRequestByQuiz((requestsRes.data ?? []) as MissionRequestRow[]),
     )
     setLoading(false)
-  }, [teamId, locationGroup])
+  }, [teamId, locationGroup, dayNumber])
 
   useEffect(() => {
     fetchAll()
@@ -97,7 +109,7 @@ export default function LocationMission() {
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
-            onClick={() => navigate('/location-select')}
+            onClick={() => navigate(`/location-select?day=${dayNumber}`)}
             className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold text-text-dark/60 border border-text-dark/10 hover:bg-cream hover:text-text-dark"
           >
             ← 장소 선택
@@ -147,7 +159,7 @@ export default function LocationMission() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/location-select')}
+              onClick={() => navigate(`/location-select?day=${dayNumber}`)}
               className="mt-3 px-3 py-1.5 rounded-lg text-xs font-bold border border-text-dark/10 hover:bg-white"
             >
               장소 선택으로 돌아가기
@@ -208,7 +220,7 @@ export default function LocationMission() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/location-select')}
+              onClick={() => navigate(`/location-select?day=${dayNumber}`)}
               className="mt-6 w-full rounded-2xl bg-orange-main py-3.5 text-base font-bold text-white hover:bg-orange-sub active:scale-[0.98] transition-all"
               style={{ boxShadow: 'var(--shadow-orange-sm)' }}
             >

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
@@ -8,6 +8,9 @@ import type { AnswerRow, MissionRequestRow } from '../components/MissionSlot'
 import { isSlotDone, latestRequestByQuiz } from '../components/MissionSlot'
 
 const POLL_INTERVAL_MS = 5000
+
+/** ?day 가 없으면 기존 링크 호환을 위해 2일차로 본다 */
+const DEFAULT_DAY = 2
 
 interface LocationCard {
   group: string
@@ -19,8 +22,12 @@ interface LocationCard {
 
 export default function LocationSelect() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+
+  const dayParam = Number(searchParams.get('day'))
+  const dayNumber = Number.isFinite(dayParam) && dayParam > 0 ? dayParam : DEFAULT_DAY
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [answersMap, setAnswersMap] = useState<Map<string, AnswerRow>>(new Map())
@@ -34,12 +41,18 @@ export default function LocationSelect() {
 
   const fetchAll = useCallback(async () => {
     if (!teamId) return
+    let quizQuery = supabase
+      .from('tanggo_quizzes')
+      .select('*')
+      .eq('is_active', true)
+    // 1일차 문항은 Phase 2 이전 등록분이라 day_number 가 null 일 수 있다
+    quizQuery =
+      dayNumber === 1
+        ? quizQuery.or('day_number.eq.1,day_number.is.null')
+        : quizQuery.eq('day_number', dayNumber)
+
     const [quizzesRes, answersRes, requestsRes, teamRes] = await Promise.all([
-      supabase
-        .from('tanggo_quizzes')
-        .select('*')
-        .eq('is_active', true)
-        .eq('day_number', 2)
+      quizQuery
         .order('location_group_order', { ascending: true, nullsFirst: false })
         .order('slot_order', { ascending: true }),
       supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
@@ -77,7 +90,7 @@ export default function LocationSelect() {
     )
 
     setLoading(false)
-  }, [teamId])
+  }, [teamId, dayNumber])
 
   useEffect(() => {
     fetchAll()
@@ -123,7 +136,7 @@ export default function LocationSelect() {
       setBlockedModal(true)
       return
     }
-    navigate(`/location-mission/${encodeURIComponent(group)}`)
+    navigate(`/location-mission/${encodeURIComponent(group)}?day=${dayNumber}`)
   }
 
   if (!teamId) return null

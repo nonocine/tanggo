@@ -3,40 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
-
-interface DayDef {
-  day: number
-  label: string
-  desc: string
-}
-
-const DEFAULT_DAYS: DayDef[] = [
-  { day: 1, label: '1일차', desc: '기관 라운딩 미션' },
-  { day: 2, label: '2일차', desc: '장소별 미션 수행' },
-]
-
-const DAY_EMOJI: Record<number, string> = {
-  1: '📅',
-  2: '🗺️',
-}
-
-function parseDays(raw: unknown): DayDef[] {
-  if (!Array.isArray(raw)) return DEFAULT_DAYS
-  const parsed: DayDef[] = []
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue
-    const rec = item as Record<string, unknown>
-    const day = Number(rec.day)
-    if (!Number.isFinite(day)) continue
-    parsed.push({
-      day,
-      label: typeof rec.label === 'string' ? rec.label : `${day}일차`,
-      desc: typeof rec.desc === 'string' ? rec.desc : '',
-    })
-  }
-  if (parsed.length === 0) return DEFAULT_DAYS
-  return parsed.sort((a, b) => a.day - b.day)
-}
+import type { DayDef } from '../lib/eventDays'
+import { dayEmoji, normalizeDayNumber, parseDays } from '../lib/eventDays'
 
 export default function DaySelect() {
   const navigate = useNavigate()
@@ -48,7 +16,7 @@ export default function DaySelect() {
   const [error, setError] = useState<string | null>(null)
 
   // 이미 진행한 일차가 있으면 그 일차만 열어 준다 (null = 아직 자유 선택)
-  const [activatedDay, setActivatedDay] = useState<1 | 2 | null>(null)
+  const [activatedDay, setActivatedDay] = useState<number | null>(null)
   const [checkingDay, setCheckingDay] = useState(true)
 
   const fetchDays = useCallback(async () => {
@@ -101,10 +69,10 @@ export default function DaySelect() {
       .select('id, day_number')
       .in('id', quizIds)
 
-    const found = new Set<1 | 2>()
+    const found = new Set<number>()
     for (const row of (quizRows ?? []) as { day_number: number | null }[]) {
       // Phase 2 이전 문항은 day_number 가 null → 1일차로 취급한다
-      found.add(row.day_number === 2 ? 2 : 1)
+      found.add(normalizeDayNumber(row.day_number))
     }
 
     // 정확히 한 일차만 진행했을 때만 잠근다.
@@ -121,11 +89,12 @@ export default function DaySelect() {
     checkActivatedDay()
   }, [checkActivatedDay])
 
-  function goDay(day: number) {
-    if (day === 2) {
-      navigate('/location-select')
+  // 장소 배정을 쓰는 일차만 장소 선택 화면을 거친다
+  function goDay(d: DayDef) {
+    if (d.use_location_assign) {
+      navigate(`/location-select?day=${d.day}`)
     } else {
-      navigate(`/mission?day=${day}`)
+      navigate(`/mission?day=${d.day}`)
     }
   }
 
@@ -176,7 +145,7 @@ export default function DaySelect() {
                 <div key={d.day}>
                   <button
                     type="button"
-                    onClick={() => goDay(d.day)}
+                    onClick={() => goDay(d)}
                     disabled={disabled}
                     className={`w-full text-left rounded-3xl border-4 border-orange-main bg-white px-5 py-6 transition-all ${
                       locked
@@ -189,7 +158,7 @@ export default function DaySelect() {
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-5xl shrink-0" aria-hidden>
-                        {DAY_EMOJI[d.day] ?? '📌'}
+                        {dayEmoji(d.day)}
                       </span>
                       <div className="min-w-0">
                         <p className="text-xl font-black text-text-dark">
@@ -222,7 +191,9 @@ export default function DaySelect() {
                   </button>
                   {locked && (
                     <p className="mt-1.5 text-center text-[11px] font-semibold text-text-dark/45">
-                      {activatedDay}일차 진행 중
+                      {days.find((x) => x.day === activatedDay)?.label ??
+                        `${activatedDay}일차`}{' '}
+                      진행 중
                     </p>
                   )}
                 </div>
