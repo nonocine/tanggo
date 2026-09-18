@@ -353,7 +353,9 @@ export default function MissionApprovalQueue({ actorLabel }: Props) {
                 {rejectFor.slot_label && (
                   <>
                     <span className="text-text-dark/40 mx-1">·</span>
-                    <span className="font-semibold">{rejectFor.slot_label}</span>
+                    <span className="font-black text-orange-main">
+                      {rejectFor.slot_label}
+                    </span>
                   </>
                 )}
               </p>
@@ -455,17 +457,18 @@ function MediaBlock({
         <p className="text-xs font-bold text-text-dark/60 mb-1.5">
           📷 제출된 사진
         </p>
+        {/* 검은 레터박스 대신 옅은 회색 판 위에 사진을 제 비율대로 올린다 */}
         <button
           type="button"
           onClick={() => onOpenLightbox(req.media_url!)}
-          className="block w-full rounded-xl overflow-hidden bg-black cursor-zoom-in"
+          className="flex w-full justify-center rounded-xl overflow-hidden bg-text-dark/5 p-2 cursor-zoom-in"
           aria-label="사진 확대 보기"
         >
           <img
             src={req.media_url}
             alt="제출된 사진"
             loading="lazy"
-            className="w-full max-h-80 object-contain"
+            className="max-h-[60vh] w-auto max-w-full rounded-lg object-contain"
           />
         </button>
       </div>
@@ -509,11 +512,6 @@ function PendingCard({
       className="rounded-2xl border-4 border-orange-main bg-white p-4 animate-slide-in-down"
       style={{ boxShadow: 'var(--shadow-orange-sm)' }}
     >
-      {req.slot_label && (
-        <p className="mb-2 inline-flex items-center px-2 py-0.5 rounded-full bg-orange-main/10 text-orange-main text-[11px] font-black">
-          🧩 {req.slot_label}
-        </p>
-      )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-base font-black text-text-dark">
@@ -538,6 +536,18 @@ function PendingCard({
           </p>
         </div>
       </div>
+
+      {/* 관리자가 대조해야 할 답 — 사진 바로 위에 크게 */}
+      {req.slot_label && (
+        <div className="mt-3 rounded-2xl border-l-4 border-orange-main bg-orange-main/8 px-4 py-3">
+          <p className="text-[11px] font-bold text-text-dark/50">
+            ✏️ 참가자가 적은 답
+          </p>
+          <p className="mt-0.5 text-xl font-black text-text-dark break-words">
+            {req.slot_label}
+          </p>
+        </div>
+      )}
 
       <MediaBlock req={req} onOpenLightbox={onOpenLightbox} />
 
@@ -584,11 +594,6 @@ function ProcessedCard({
               미션 <span className="tabular-nums">#{req.quiz?.order_num}</span>
             </span>
           </p>
-          {req.slot_label && (
-            <p className="mt-0.5 text-[11px] font-bold text-orange-main truncate">
-              🧩 {req.slot_label}
-            </p>
-          )}
           {!approved && (req.rejection_reason ?? req.note) && (
             <p className="mt-1 text-xs text-text-dark/60 italic">
               "{req.rejection_reason ?? req.note}"
@@ -616,6 +621,17 @@ function ProcessedCard({
           </p>
         </div>
       </div>
+
+      {req.slot_label && (
+        <div className="mt-2 rounded-xl border-l-4 border-orange-main bg-orange-main/8 px-3 py-2">
+          <p className="text-[11px] font-bold text-text-dark/50">
+            ✏️ 참가자가 적은 답
+          </p>
+          <p className="mt-0.5 text-base font-black text-text-dark break-words">
+            {req.slot_label}
+          </p>
+        </div>
+      )}
 
       {/* 미디어가 있으면 작게 표시 (썸네일) */}
       {req.media_url && req.media_type === 'photo' && (
