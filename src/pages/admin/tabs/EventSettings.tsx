@@ -8,6 +8,12 @@ import {
   parseDays,
   resizeDays,
 } from '../../../lib/eventDays'
+import type { SubmitMode } from '../../../lib/submitMode'
+import {
+  SUBMIT_MODES,
+  SUBMIT_MODE_LABELS,
+  parseSubmitMode,
+} from '../../../lib/submitMode'
 
 const POLL_INTERVAL_MS = 30_000
 
@@ -24,7 +30,10 @@ interface EventConfig {
   target_teams: number | null
   event_mode: 'single' | 'multi_day'
   days: unknown
+  /** 하위호환용 — 현재 판정은 submit_mode 로 한다 */
   require_consensus: boolean
+  /** 마이그레이션 전 DB 에서는 값이 없을 수 있다 */
+  submit_mode?: string | null
   show_episode: boolean
 }
 
@@ -364,13 +373,14 @@ export default function EventSettings() {
     setSavingSection(null)
   }
 
-  async function toggleRequireConsensus() {
-    if (!config) return
-    const next = !config.require_consensus
+  async function selectSubmitMode(mode: SubmitMode) {
+    if (!config || parseSubmitMode(config) === mode) return
+    const { emoji, label } = SUBMIT_MODE_LABELS[mode]
     await updateConfig(
       'consensus',
-      { require_consensus: next },
-      next ? '🤝 전원 동의 제출을 켰어요' : '🙋 개인 제출로 전환했어요',
+      // require_consensus 는 하위호환용으로 함께 갱신한다
+      { submit_mode: mode, require_consensus: mode === 'consensus' },
+      `${emoji} 제출 방식을 '${label}'(으)로 바꿨어요`,
     )
   }
 
@@ -421,6 +431,8 @@ export default function EventSettings() {
       </div>
     )
   }
+
+  const currentSubmitMode = parseSubmitMode(config)
 
   return (
     <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-5">
@@ -642,34 +654,50 @@ export default function EventSettings() {
 
       {/* 섹션 3: 제출 방식 */}
       <SectionCard icon="🤝" title="제출 방식">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-text-dark">
-              팀원 전원 동의 제출
-            </p>
-            <p className="mt-1 text-xs text-text-dark/60 leading-relaxed">
-              {config.require_consensus
-                ? 'ON · 팀원 모두가 같은 답을 선택해야 방장이 제출할 수 있어요. 아이들의 참여를 유도합니다.'
-                : 'OFF · 각자 자유롭게 답을 제출할 수 있어요.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={config.require_consensus}
-            aria-label="팀원 전원 동의 제출"
-            onClick={toggleRequireConsensus}
-            disabled={savingSection === 'consensus'}
-            className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-              config.require_consensus ? 'bg-orange-main' : 'bg-text-dark/20'
-            }`}
-          >
-            <span
-              className={`inline-block h-7 w-7 transform rounded-full bg-white shadow transition-transform ${
-                config.require_consensus ? 'translate-x-6' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
+        <div
+          role="radiogroup"
+          aria-label="제출 방식"
+          className="flex flex-col gap-2"
+        >
+          {SUBMIT_MODES.map((mode) => {
+            const { label, desc, emoji } = SUBMIT_MODE_LABELS[mode]
+            const selected = currentSubmitMode === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => selectSubmitMode(mode)}
+                disabled={savingSection === 'consensus'}
+                className={`w-full flex items-start gap-3 px-4 py-3 rounded-2xl text-left transition-colors disabled:opacity-50 ${
+                  selected
+                    ? 'border-2 border-orange-main bg-orange-main/5'
+                    : 'border border-text-dark/15 hover:border-orange-main/40'
+                }`}
+              >
+                <span className="text-xl leading-none mt-0.5" aria-hidden>
+                  {emoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-text-dark">
+                    {label}
+                  </span>
+                  <span className="mt-1 block text-xs text-text-dark/60 leading-relaxed">
+                    {desc}
+                  </span>
+                </span>
+                {selected && (
+                  <span
+                    className="shrink-0 text-lg font-black text-orange-main"
+                    aria-hidden
+                  >
+                    ✓
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </SectionCard>
 

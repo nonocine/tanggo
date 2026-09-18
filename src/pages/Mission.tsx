@@ -23,6 +23,13 @@ import {
   fetchVotesForQuiz,
   upsertMyVote,
 } from '../lib/memberVotes'
+import type { SubmitMode } from '../lib/submitMode'
+import {
+  LEADER_ONLY_NOTICE,
+  canSubmitInLeaderOnly,
+  fetchEventConfigWithSubmitMode,
+  parseSubmitMode,
+} from '../lib/submitMode'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -58,7 +65,10 @@ interface TeamRow {
 
 interface EventConfigRow {
   service_ended: boolean
-  require_consensus: boolean
+  /** 하위호환용 — submit_mode 가 없는 DB 에서만 쓰인다 */
+  require_consensus?: boolean | null
+  /** 마이그레이션 전 DB 에서는 값이 없을 수 있다 */
+  submit_mode?: string | null
 }
 
 type CardStatus = 'submitted' | 'awaiting' | 'todo'
@@ -192,11 +202,9 @@ export default function Mission() {
           )
           .eq('id', teamId)
           .maybeSingle(),
-        supabase
-          .from('tanggo_event_config')
-          .select('service_ended, require_consensus')
-          .eq('id', 1)
-          .maybeSingle(),
+        fetchEventConfigWithSubmitMode<{ service_ended: boolean }>(
+          'service_ended, require_consensus',
+        ),
         supabase
           .from('tanggo_team_members')
           .select('name, created_at')
@@ -254,8 +262,8 @@ export default function Mission() {
     return () => clearInterval(t)
   }, [fetchAll])
 
-  // 관리자가 끄면 투표 없이 개인이 바로 제출한다 (설정 로딩 전에는 기본값 ON)
-  const requireConsensus = config?.require_consensus ?? true
+  // 제출 방식 — 설정 로딩 전에는 가장 보수적인 'consensus' 로 본다
+  const submitMode: SubmitMode = config ? parseSubmitMode(config) : 'consensus'
 
   const reloadVotes = useCallback(
     async (quizId: string) => {
@@ -270,7 +278,8 @@ export default function Mission() {
   useEffect(() => {
     if (!openQuiz || !teamId) return
     if (openQuiz.type === 'mission') return
-    if (!requireConsensus) return
+    // consensus 외의 모드는 투표 자체가 없으므로 구독/폴링을 걸지 않는다
+    if (submitMode !== 'consensus') return
     const quizId = openQuiz.id
 
     reloadVotes(quizId)
@@ -298,11 +307,13 @@ export default function Mission() {
       clearInterval(t)
       supabase.removeChannel(channel)
     }
-  }, [openQuiz, teamId, reloadVotes, requireConsensus])
+  }, [openQuiz, teamId, reloadVotes, submitMode])
 
   // 방장 판정 — leader_name 이 없는 예전 팀은 전원이 제출 가능
   const leaderName = team?.leader_name ?? null
   const isLeader = !leaderName || (!!memberName && memberName === leaderName)
+  // leader_only 제출 가능 여부 — 방장/내 이름을 모르면 잠그지 않는다
+  const canLeaderSubmit = canSubmitInLeaderOnly(leaderName, memberName)
   const totalMembers =
     memberNames.length > 0 ? memberNames.length : (team?.member_count ?? 0)
 
@@ -520,7 +531,8 @@ export default function Mission() {
           totalMembers={totalMembers}
           leaderName={leaderName}
           isLeader={isLeader}
-          requireConsensus={requireConsensus}
+          submitMode={submitMode}
+          canLeaderSubmit={canLeaderSubmit}
           votes={votesMap.get(openQuiz.id) ?? []}
           onVoted={() => reloadVotes(openQuiz.id)}
           onClose={() => setOpenQuiz(null)}
@@ -596,7 +608,8 @@ function QuizSolveModal({
   totalMembers,
   leaderName,
   isLeader,
-  requireConsensus,
+  submitMode,
+  canLeaderSubmit,
   votes,
   onVoted,
   onClose,
@@ -613,7 +626,8 @@ function QuizSolveModal({
   totalMembers: number
   leaderName: string | null
   isLeader: boolean
-  requireConsensus: boolean
+  submitMode: SubmitMode
+  canLeaderSubmit: boolean
   votes: MemberVoteRow[]
   onVoted: () => void
   onClose: () => void
@@ -654,13 +668,15 @@ function QuizSolveModal({
   // 한 번 제출하면 잠김 — 정답/오답 무관. mission은 거절도 확정으로 본다.
   const locked = !!answer || (isMission && missionRequest?.status === 'rejected')
 
-  /* ── 전원 동의 투표 ─────────────────────────────────
-     본인 이름이 확인된 팀원만 투표에 참여한다.
-     memberName 이 없는(예전 저장분) 경우 기존 단독 제출 방식으로 동작.
-     관리자가 '팀원 전원 동의 제출'을 끄면(requireConsensus=false) 투표 없이
-     누구나 바로 제출한다. */
+  /* ── 제출 방식별 분기 ───────────────────────────────
+     consensus   : 본인 이름이 확인된 팀원끼리 투표 → 전원 동의 시 방장이 제출.
+                   memberName 이 없는(예전 저장분) 경우 기존 단독 제출로 동작.
+     leader_only : 투표 없이 방장만 제출. 비방장은 읽기 전용.
+     free        : 누구나 바로 제출. */
   const votingEnabled =
-    requireConsensus && !isMission && !!memberName && totalMembers > 0
+    submitMode === 'consensus' && !isMission && !!memberName && totalMembers > 0
+  // leader_only 에서 비방장 — 선택지/입력창/제출 버튼 모두 잠근다
+  const readOnlyForMember = submitMode === 'leader_only' && !canLeaderSubmit
   const myVote = memberName
     ? (votes.find((v) => v.member_name === memberName) ?? null)
     : null
@@ -899,6 +915,7 @@ function QuizSolveModal({
                   <input
                     type="text"
                     value={textValue}
+                    disabled={readOnlyForMember}
                     onChange={(e) => {
                       setTextTouched(true)
                       setTextAnswer(e.target.value)
@@ -908,9 +925,11 @@ function QuizSolveModal({
                       if (votingEnabled) castVote(textValue)
                       else handleTextSubmit()
                     }}
-                    placeholder="정답을 입력하세요"
+                    placeholder={
+                      readOnlyForMember ? '방장이 입력해요' : '정답을 입력하세요'
+                    }
                     autoComplete="off"
-                    className="mt-1.5 w-full px-4 py-3 rounded-2xl border-2 border-text-dark/10 bg-white text-base font-medium placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20"
+                    className="mt-1.5 w-full px-4 py-3 rounded-2xl border-2 border-text-dark/10 bg-white text-base font-medium placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20 disabled:bg-text-dark/5 disabled:text-text-dark/40"
                   />
                   {votingEnabled && (
                     <button
@@ -947,12 +966,12 @@ function QuizSolveModal({
                       <button
                         key={idx}
                         type="button"
-                        disabled={voting}
+                        disabled={voting || readOnlyForMember}
                         onClick={() => {
                           setChoiceIdx(idx)
                           if (votingEnabled) castVote(String(idx + 1))
                         }}
-                        className={`flex items-center gap-3 px-3 py-3 rounded-2xl border-2 text-left transition-colors ${
+                        className={`flex items-center gap-3 px-3 py-3 rounded-2xl border-2 text-left transition-colors disabled:cursor-not-allowed ${
                           selected
                             ? 'border-orange-main bg-orange-main/5'
                             : 'border-text-dark/10 hover:border-orange-main/40'
@@ -973,6 +992,18 @@ function QuizSolveModal({
                       </button>
                     )
                   })}
+                </div>
+              )}
+
+              {readOnlyForMember && (
+                <div className="mt-5 p-4 rounded-2xl bg-cream text-center">
+                  <p className="text-sm font-black text-text-dark/70">
+                    {LEADER_ONLY_NOTICE}
+                  </p>
+                  <p className="mt-1 text-xs text-text-dark/55">
+                    방장{leaderName ? ` (${leaderName})` : ''}이 제출하면 이
+                    화면에도 ✅ 제출 완료로 바뀌어요
+                  </p>
                 </div>
               )}
 
@@ -999,7 +1030,7 @@ function QuizSolveModal({
                 </div>
               )}
 
-              {quiz.type === 'mission' && isUploadKind && (
+              {quiz.type === 'mission' && isUploadKind && !readOnlyForMember && (
                 <div className="mt-5">
                   <p className="text-sm font-bold text-text-dark mb-2">
                     {missionSubtype === 'video'
@@ -1103,7 +1134,15 @@ function QuizSolveModal({
           )}
         </div>
 
-        {!locked && !missionPending && (
+        {!locked && !missionPending && readOnlyForMember && (
+          <div className="px-6 py-4 border-t border-text-dark/10 text-center">
+            <p className="text-sm font-bold text-text-dark/60">
+              {LEADER_ONLY_NOTICE}
+            </p>
+          </div>
+        )}
+
+        {!locked && !missionPending && !readOnlyForMember && (
           <div className="px-6 py-4 border-t border-text-dark/10 flex items-center justify-end gap-2">
             {quiz.hint && !showHint && (
               <button

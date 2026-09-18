@@ -12,6 +12,8 @@ import {
   formatBytes,
   uploadMissionMedia,
 } from '../lib/missionMedia'
+import type { SubmitMode } from '../lib/submitMode'
+import { LEADER_ONLY_NOTICE } from '../lib/submitMode'
 
 export interface AnswerRow {
   id: string
@@ -76,6 +78,10 @@ export interface MissionSlotProps {
   locked: boolean
   /** 표시용 번호 */
   slotIndex: number
+  /** 제출 방식 — 이 컴포넌트에는 투표 UI 가 없어 consensus 는 free 와 동일하게 동작한다 */
+  submitMode: SubmitMode
+  /** leader_only 에서 이 사람이 제출할 수 있는지 (방장/이름 미상이면 true) */
+  canLeaderSubmit: boolean
   onChanged?: () => void
   /** 제출이 성공했을 때만 호출 — 축하 팝업 트리거 */
   onSubmitted?: () => void
@@ -108,6 +114,18 @@ function SlotBadge({
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-text-dark/10 text-text-dark/60">
       ✅ 제출완료
     </span>
+  )
+}
+
+/** leader_only 모드에서 비방장에게 보이는 안내 */
+function LeaderOnlyNotice() {
+  return (
+    <div className="mt-3 p-3 rounded-xl bg-cream">
+      <p className="text-sm font-bold text-text-dark/70">{LEADER_ONLY_NOTICE}</p>
+      <p className="mt-0.5 text-xs text-text-dark/55">
+        방장이 제출하면 이 화면에도 ✅ 로 표시돼요
+      </p>
+    </div>
   )
 }
 
@@ -181,6 +199,8 @@ export default function MissionSlot({
   existingAnswer,
   locked,
   slotIndex,
+  submitMode,
+  canLeaderSubmit,
   onChanged,
   onSubmitted,
 }: MissionSlotProps) {
@@ -340,7 +360,9 @@ export default function MissionSlot({
     )
   }
 
-  const editable = !status || (rejected && resubmit)
+  // leader_only 에서 비방장 — 업로드/입력/제출 전부 잠기고 안내만 보인다
+  const memberLocked = submitMode === 'leader_only' && !canLeaderSubmit
+  const editable = (!status || (rejected && resubmit)) && !memberLocked
   const showUploader = (subtype === 'video' || subtype === 'photo') && editable
   const showPhotoWithText = isPhotoWithText && editable
   const showVerifyButton = subtype === 'verify' && editable
@@ -439,7 +461,7 @@ export default function MissionSlot({
                   사유: {existingRequest?.rejection_reason ?? existingRequest?.note}
                 </p>
               )}
-              {!resubmit && (
+              {!resubmit && !memberLocked && (
                 <button
                   type="button"
                   onClick={() => setResubmit(true)}
@@ -450,6 +472,8 @@ export default function MissionSlot({
               )}
             </div>
           )}
+
+          {memberLocked && !approved && !pending && <LeaderOnlyNotice />}
 
           {showUploader && (
             <div className="mt-3">
@@ -676,6 +700,7 @@ export default function MissionSlot({
       {/* ── 객관식 ──────────────────────────────────────── */}
       {quiz.type === 'choice' && quiz.choices && (
         <div className="mt-3">
+          {memberLocked && !existingAnswer && <LeaderOnlyNotice />}
           {existingAnswer ? (
             <div className="p-3 rounded-xl bg-text-dark/5">
               <p className="text-sm font-bold text-text-dark/60">🔒 제출 완료</p>
@@ -685,7 +710,7 @@ export default function MissionSlot({
                   existingAnswer.submitted}
               </p>
             </div>
-          ) : (
+          ) : memberLocked ? null : (
             <>
               <div className="flex flex-col gap-2">
                 {quiz.choices.map((c, idx) => {
@@ -737,6 +762,7 @@ export default function MissionSlot({
       {/* ── 주관식 ──────────────────────────────────────── */}
       {quiz.type === 'text' && (
         <div className="mt-3">
+          {memberLocked && !existingAnswer && <LeaderOnlyNotice />}
           {existingAnswer ? (
             <div className="p-3 rounded-xl bg-text-dark/5">
               <p className="text-sm font-bold text-text-dark/60">🔒 제출 완료</p>
@@ -744,7 +770,7 @@ export default function MissionSlot({
                 제출한 답: {existingAnswer.submitted}
               </p>
             </div>
-          ) : (
+          ) : memberLocked ? null : (
             <>
               <textarea
                 value={textAnswer}

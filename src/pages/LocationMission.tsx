@@ -11,6 +11,12 @@ import type { AnswerRow, MissionRequestRow } from '../components/MissionSlot'
 import type { Quiz } from '../lib/quizTypes'
 import SubmitCelebration from '../components/SubmitCelebration'
 import { useText } from '../lib/useTextContent'
+import type { SubmitMode } from '../lib/submitMode'
+import {
+  canSubmitInLeaderOnly,
+  fetchEventConfigWithSubmitMode,
+  parseSubmitMode,
+} from '../lib/submitMode'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -24,6 +30,7 @@ export default function LocationMission() {
   const locationGroup = decodeURIComponent(params.locationGroup ?? '')
   const teamId = useTeamStore((s) => s.teamId)
   const teamName = useTeamStore((s) => s.teamName)
+  const memberName = useTeamStore((s) => s.memberName)
 
   const dayParam = Number(searchParams.get('day'))
   const dayNumber = Number.isFinite(dayParam) && dayParam > 0 ? dayParam : DEFAULT_DAY
@@ -35,6 +42,9 @@ export default function LocationMission() {
   )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [leaderName, setLeaderName] = useState<string | null>(null)
+  // 설정 로딩 전에는 가장 보수적인 'consensus' 로 본다
+  const [submitMode, setSubmitMode] = useState<SubmitMode>('consensus')
   const [celebrateSeen, setCelebrateSeen] = useState(false)
   // 슬롯 1건 제출 성공 시 뜨는 축하 팝업 (장소 전체 완료 모달과는 별개)
   const [submitCelebrate, setSubmitCelebrate] = useState(false)
@@ -54,11 +64,22 @@ export default function LocationMission() {
         ? quizQuery.or('day_number.eq.1,day_number.is.null')
         : quizQuery.eq('day_number', dayNumber)
 
-    const [quizzesRes, answersRes, requestsRes] = await Promise.all([
-      quizQuery.order('slot_order', { ascending: true }),
-      supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
-      supabase.from('tanggo_mission_requests').select('*').eq('team_id', teamId),
-    ])
+    const [quizzesRes, answersRes, requestsRes, teamRes, configRes] =
+      await Promise.all([
+        quizQuery.order('slot_order', { ascending: true }),
+        supabase.from('tanggo_answers').select('*').eq('team_id', teamId),
+        supabase
+          .from('tanggo_mission_requests')
+          .select('*')
+          .eq('team_id', teamId),
+        supabase
+          .from('tanggo_teams')
+          .select('leader_name')
+          .eq('id', teamId)
+          .maybeSingle(),
+        // submit_mode 컬럼이 없는 DB 에서도 화면이 죽지 않도록 폴백 조회
+        fetchEventConfigWithSubmitMode('require_consensus'),
+      ])
 
     const firstErr = quizzesRes.error || answersRes.error || requestsRes.error
     if (firstErr) {
@@ -77,6 +98,12 @@ export default function LocationMission() {
     setRequestsMap(
       latestRequestByQuiz((requestsRes.data ?? []) as MissionRequestRow[]),
     )
+    // 방장/제출 방식은 실패해도 미션 진행을 막지 않는다 (잠김 방지)
+    setLeaderName(
+      ((teamRes.data ?? null) as { leader_name: string | null } | null)
+        ?.leader_name ?? null,
+    )
+    if (configRes.data) setSubmitMode(parseSubmitMode(configRes.data))
     setLoading(false)
   }, [teamId, locationGroup, dayNumber])
 
@@ -98,6 +125,9 @@ export default function LocationMission() {
       return { quiz: q, answer, request, done, locked }
     })
   }, [quizzes, answersMap, requestsMap])
+
+  // leader_only 제출 가능 여부 — 방장/내 이름을 모르면 잠그지 않는다
+  const canLeaderSubmit = canSubmitInLeaderOnly(leaderName, memberName)
 
   const doneCount = slots.filter((s) => s.done).length
   const total = slots.length
@@ -182,6 +212,8 @@ export default function LocationMission() {
                 existingAnswer={s.answer}
                 locked={s.locked}
                 slotIndex={idx + 1}
+                submitMode={submitMode}
+                canLeaderSubmit={canLeaderSubmit}
                 onChanged={fetchAll}
                 onSubmitted={() => setSubmitCelebrate(true)}
               />
