@@ -1,10 +1,65 @@
 import sharp from 'sharp'
-import { mkdir } from 'node:fs/promises'
+import { access, copyFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PUBLIC_DIR = join(__dirname, '..', 'public')
+
+// =========================================================================
+// 테마 스위치
+//   'default'      → 아래 ○□△ SVG 를 그려서 PNG 생성 (해결해On나 원본)
+//   그 외(테마명)  → public/theme/<테마명>/ 의 파일을 public/ 루트로 복사
+// 되돌리는 방법은 프로젝트 루트 THEME_SWITCH.md 참고.
+// =========================================================================
+const THEME = process.env.ASSET_THEME ?? 'jangyeongsil'
+
+const THEME_LABEL = {
+  default: '기본 (해결해On나)',
+  jangyeongsil: '장영실 창의과학 아카데미',
+}
+
+/** 테마 폴더에서 public/ 루트로 그대로 복사할 파일들.
+ *  splash.mp4 는 /splash.mp4 로 서빙돼야 스플래시 화면이 재생된다. */
+const THEME_ASSETS = [
+  'icon-192.png',
+  'icon-512.png',
+  'favicon-16.png',
+  'favicon-32.png',
+  'og-image.png',
+  'apple-touch-icon.png',
+  'splash.mp4',
+]
+
+async function copyThemeAssets() {
+  const themeDir = join(PUBLIC_DIR, 'theme', THEME)
+
+  // 한 개라도 빠져 있으면 반쪽짜리 테마가 배포되므로 먼저 전부 확인한다
+  const missing = []
+  for (const name of THEME_ASSETS) {
+    try {
+      await access(join(themeDir, name))
+    } catch {
+      missing.push(name)
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `테마 '${THEME}' 원본 파일이 없습니다.
+  폴더: ${themeDir}
+  누락: ${missing.join(', ')}
+  → 파일을 채우거나, ASSET_THEME=default 로 기본 테마를 쓰세요.`,
+    )
+  }
+
+  await Promise.all(
+    THEME_ASSETS.map(async (name) => {
+      const out = join(PUBLIC_DIR, name)
+      await copyFile(join(themeDir, name), out)
+      console.log(`✓ ${out}`)
+    }),
+  )
+}
 
 const FONT_STACK =
   "'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans CJK KR', sans-serif"
@@ -218,6 +273,15 @@ async function makeFavicon(size) {
 async function main() {
   await mkdir(PUBLIC_DIR, { recursive: true })
 
+  if (THEME !== 'default') {
+    console.log(`[assets] 테마: ${THEME_LABEL[THEME] ?? THEME} (파일 복사)`)
+    await copyThemeAssets()
+    console.log('\n🎉 모든 에셋 복사 완료')
+    return
+  }
+
+  console.log(`[assets] 테마: ${THEME_LABEL.default}`)
+
   await Promise.all([
     makeIcon(192),
     makeIcon(512),
@@ -230,6 +294,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('❌ 에셋 생성 실패:', err)
+  console.error('❌ 에셋 준비 실패:', err.message ?? err)
   process.exit(1)
 })

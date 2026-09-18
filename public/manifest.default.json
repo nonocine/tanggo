@@ -1,12 +1,12 @@
 {
-  "name": "장영실 창의과학 아카데미",
-  "short_name": "장영실",
-  "description": "동래구청소년센터 창의과학 미션",
+  "name": "해결해On나 - 동래미 게임",
+  "short_name": "해결해On나",
+  "description": "동래구청소년센터 실내 오리엔티어링 미션",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FBF4E0",
-  "theme_color": "#222C8C",
+  "background_color": "#FFF8E7",
+  "theme_color": "#FF6B47",
   "icons": [
     {
       "src": "/icon-192.png",

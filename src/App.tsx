@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { initTextContents } from './lib/useTextContent'
-import SplashScreen from './components/SplashScreen'
 import AdminProtected from './components/AdminProtected'
 import OperatorProtected from './components/OperatorProtected'
 import ParticipantGate from './components/ParticipantGate'
 import Landing from './pages/Landing'
+import Splash from './pages/Splash'
+import { hasSeenSplash } from './lib/splashSeen'
 import TeamCreate from './pages/TeamCreate'
 import TeamJoin from './pages/TeamJoin'
 import Lobby from './pages/Lobby'
@@ -20,23 +21,13 @@ import AdminDashboard from './pages/admin/AdminDashboard'
 import OperatorLogin from './pages/operator/OperatorLogin'
 import OperatorDashboard from './pages/operator/OperatorDashboard'
 
-const SPLASH_FLAG = 'tanggo_splash_shown'
-
-function SplashThenLanding() {
-  const [showSplash, setShowSplash] = useState(
-    () => typeof window !== 'undefined' && !sessionStorage.getItem(SPLASH_FLAG),
-  )
-
-  useEffect(() => {
-    if (!showSplash) return
-    const t = setTimeout(() => {
-      setShowSplash(false)
-      sessionStorage.setItem(SPLASH_FLAG, '1')
-    }, 1500)
-    return () => clearTimeout(t)
-  }, [showSplash])
-
-  return showSplash ? <SplashScreen /> : <Landing />
+/** 앱 최초 진입(/)에만 붙는 게이트.
+ *  이 세션에서 스플래시를 아직 안 봤으면 영상 스플래시로 보낸다.
+ *  /admin, /operator 등 다른 경로에는 게이트가 없으므로 운영자·관리자는
+ *  절대 스플래시를 거치지 않는다. */
+function LandingEntry() {
+  if (!hasSeenSplash()) return <Navigate to="/splash" replace />
+  return <Landing />
 }
 
 function App() {
@@ -47,7 +38,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<SplashThenLanding />} />
+        <Route path="/" element={<LandingEntry />} />
+        <Route path="/splash" element={<Splash />} />
         <Route path="/team-create" element={<TeamCreate />} />
         <Route path="/team-join" element={<TeamJoin />} />
         <Route
