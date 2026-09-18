@@ -25,6 +25,7 @@ interface EventConfig {
   event_mode: 'single' | 'multi_day'
   days: unknown
   require_consensus: boolean
+  show_episode: boolean
 }
 
 function pad(n: number): string {
@@ -373,6 +374,18 @@ export default function EventSettings() {
     )
   }
 
+  async function toggleShowEpisode() {
+    if (!config) return
+    const next = !config.show_episode
+    await updateConfig(
+      'episode',
+      { show_episode: next },
+      next
+        ? '📺 대기실 에피소드를 켰어요'
+        : '🙈 대기실 에피소드를 껐어요',
+    )
+  }
+
   async function toggleServiceEnded() {
     if (!config) return
     const next = !config.service_ended
@@ -660,7 +673,40 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 4: 목표 팀 수 */}
+      {/* 섹션 4: 대기실 에피소드 영상 */}
+      <SectionCard icon="📺" title="대기실 에피소드">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-text-dark">
+              대기실 에피소드 영상
+            </p>
+            <p className="mt-1 text-xs text-text-dark/60 leading-relaxed">
+              {config.show_episode
+                ? 'ON · 대기 중인 참가자에게 장영실 이야기 영상을 보여줍니다.'
+                : 'OFF · 영상을 표시하지 않습니다.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={config.show_episode}
+            aria-label="대기실 에피소드 영상"
+            onClick={toggleShowEpisode}
+            disabled={savingSection === 'episode'}
+            className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              config.show_episode ? 'bg-orange-main' : 'bg-text-dark/20'
+            }`}
+          >
+            <span
+              className={`inline-block h-7 w-7 transform rounded-full bg-white shadow transition-transform ${
+                config.show_episode ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </SectionCard>
+
+      {/* 섹션 5: 목표 팀 수 */}
       <SectionCard
         icon="🎯"
         title="목표 팀 수"
@@ -695,7 +741,7 @@ export default function EventSettings() {
         </Field>
       </SectionCard>
 
-      {/* 섹션 5: 공지사항 */}
+      {/* 섹션 6: 공지사항 */}
       <SectionCard
         icon="📢"
         title="공지사항"
@@ -752,7 +798,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 6: 행사 제어 */}
+      {/* 섹션 7: 행사 제어 */}
       <SectionCard icon="🚦" title="행사 제어" tone="red">
         <div className="flex flex-col md:flex-row gap-2">
           <button
@@ -783,7 +829,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 7: 서비스 종료 토글 */}
+      {/* 섹션 8: 서비스 종료 토글 */}
       <SectionCard icon="🔒" title="서비스 종료 토글">
         <div className="flex items-center justify-between gap-3">
           <div>

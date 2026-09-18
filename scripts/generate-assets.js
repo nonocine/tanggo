@@ -31,6 +31,8 @@ const THEME_ASSETS = [
   'splash.mp4',
   'wave.webp',
   'wave-poster.jpg',
+  'ep01.mp4',
+  'ep01-poster.jpg',
 ]
 
 async function copyThemeAssets() {

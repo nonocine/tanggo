@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import { useText } from '../lib/useTextContent'
 import AnnouncementBanner from '../components/AnnouncementBanner'
+import EpisodePlayer from '../components/EpisodePlayer'
 import { parseDays } from '../lib/eventDays'
 
 const POLL_INTERVAL_MS = 5000
@@ -25,6 +26,52 @@ interface EventConfigRow {
   service_ended: boolean
   event_mode: EventMode
   days: unknown
+  /** 마이그레이션 전 DB 에서는 값이 없을 수 있다 → 없으면 표시(컬럼 기본값 true) */
+  show_episode?: boolean | null
+}
+
+const CONFIG_COLUMNS_BASE = 'event_start_at, service_ended, event_mode, days'
+
+/** show_episode 컬럼이 아직 없는 DB 에서도 대기실이 죽지 않도록 기존 컬럼만으로 한 번 더 조회한다 */
+async function fetchEventConfig() {
+  const withEpisode = await supabase
+    .from('tanggo_event_config')
+    .select(`${CONFIG_COLUMNS_BASE}, show_episode`)
+    .eq('id', 1)
+    .maybeSingle()
+  if (!withEpisode.error) return withEpisode
+  return await supabase
+    .from('tanggo_event_config')
+    .select(CONFIG_COLUMNS_BASE)
+    .eq('id', 1)
+    .maybeSingle()
+}
+
+/* ── 대기실 에피소드 ──────────────────────────────────────
+   에피소드를 교체/추가할 때는 아래 4개 상수만 고치면 된다.
+   영상 파일은 public/theme/<테마명>/ 에 넣고
+   scripts/generate-assets.js 의 THEME_ASSETS 목록에도 추가해야 한다. */
+const EPISODE_ID = 'ep01'
+const EPISODE_SRC = `/${EPISODE_ID}.mp4`
+const EPISODE_POSTER = `/${EPISODE_ID}-poster.jpg`
+/** 탭을 닫아도 유지되도록 localStorage 사용 */
+const EPISODE_SEEN_KEY = `episode_seen_${EPISODE_ID}`
+
+function hasSeenEpisode(): boolean {
+  try {
+    return localStorage.getItem(EPISODE_SEEN_KEY) === '1'
+  } catch {
+    // 시크릿 모드 등에서 막히면 그냥 보여준다
+    return false
+  }
+}
+
+function markEpisodeSeen(): void {
+  try {
+    localStorage.setItem(EPISODE_SEEN_KEY, '1')
+  } catch {
+    // 저장 실패해도 재생 자체는 문제없다
+  }
 }
 
 const GO_DURATION_MS = 3000
@@ -104,11 +151,7 @@ export default function Lobby() {
         )
         .eq('id', teamId)
         .maybeSingle(),
-      supabase
-        .from('tanggo_event_config')
-        .select('event_start_at, service_ended, event_mode, days')
-        .eq('id', 1)
-        .maybeSingle(),
+      fetchEventConfig(),
     ])
     if (teamRes.error || configRes.error) {
       setError(teamRes.error?.message ?? configRes.error?.message ?? '로딩 실패')
@@ -184,19 +227,65 @@ export default function Lobby() {
             onGo={goNow}
           />
         ) : (
-          <WaitingBlock team={team!} eventStartAt={config?.event_start_at ?? null} />
+          <WaitingBlock
+            team={team!}
+            eventStartAt={config?.event_start_at ?? null}
+            episode={
+              state.kind === 'waiting' && config?.show_episode !== false ? (
+                <LobbyEpisode />
+              ) : null
+            }
+          />
         )}
       </main>
     </div>
   )
 }
 
+/** 처음 온 팀은 펼쳐진 플레이어, 이미 본 팀은 한 줄 다시보기 버튼 */
+function LobbyEpisode() {
+  const episodeTitle = useText(
+    'episode_title',
+    '장영실 이야기 - 자격루의 탄생',
+  )
+  const [expanded, setExpanded] = useState(() => !hasSeenEpisode())
+
+  function close() {
+    markEpisodeSeen()
+    setExpanded(false)
+  }
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="mt-4 w-full rounded-2xl border-2 border-orange-main/30 bg-white px-4 py-3 text-sm font-bold text-orange-main transition-all hover:border-orange-main hover:bg-orange-main/5 active:scale-[0.99]"
+      >
+        📺 장영실 이야기 다시보기
+      </button>
+    )
+  }
+
+  return (
+    <EpisodePlayer
+      src={EPISODE_SRC}
+      poster={EPISODE_POSTER}
+      title={episodeTitle}
+      onSkip={close}
+    />
+  )
+}
+
 function WaitingBlock({
   team,
   eventStartAt,
+  episode,
 }: {
   team: TeamRow
   eventStartAt: string | null
+  /** 대기 중에만 들어오는 에피소드 카드 (없으면 null) */
+  episode?: React.ReactNode
 }) {
   const waitingMessage = useText(
     'lobby_waiting_message',
@@ -246,6 +335,8 @@ function WaitingBlock({
           </p>
         )}
       </section>
+
+      {episode}
 
       <div className="mt-4 rounded-2xl bg-white border border-text-dark/10 px-4 py-3">
         <p className="text-xs font-bold text-text-dark/50">팀 정보</p>

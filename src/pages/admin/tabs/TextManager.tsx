@@ -67,6 +67,12 @@ const FALLBACK_META: Record<
     placeholder: '장영실이 칭찬해요',
     category: 'mission',
   },
+  episode_title: {
+    label: '대기실 에피소드 제목',
+    description: '대기실 에피소드 영상 카드 상단에 표시되는 제목.',
+    placeholder: '장영실 이야기 - 자격루의 탄생',
+    category: 'lobby',
+  },
   result_congrats_title: {
     label: '결과 화면 축하 제목',
     description: '결과 화면 최상단 제목.',
