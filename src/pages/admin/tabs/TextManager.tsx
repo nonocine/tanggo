@@ -55,6 +55,18 @@ const FALLBACK_META: Record<
     placeholder: '지금부터 미션 시작이에요 🚀',
     category: 'lobby',
   },
+  submit_celebrate_title: {
+    label: '제출 완료 제목',
+    description: '미션을 제출한 직후 뜨는 축하 팝업의 큰 글씨.',
+    placeholder: '제출 완료!',
+    category: 'mission',
+  },
+  submit_celebrate_sub: {
+    label: '제출 완료 부제',
+    description: '축하 팝업 큰 글씨 아래의 작은 문구.',
+    placeholder: '장영실이 칭찬해요',
+    category: 'mission',
+  },
   result_congrats_title: {
     label: '결과 화면 축하 제목',
     description: '결과 화면 최상단 제목.',
@@ -92,11 +104,19 @@ const CATEGORY_INFO: Record<string, { icon: string; label: string }> = {
   landing: { icon: '📍', label: '시작 화면 (Landing)' },
   dayselect: { icon: '📅', label: '일차 선택 화면' },
   lobby: { icon: '🏃', label: '대기실 (Lobby)' },
+  mission: { icon: '🎯', label: '미션 화면' },
   result: { icon: '🏁', label: '결과 화면 (Result)' },
   survey: { icon: '📝', label: '설문 (Survey)' },
 }
 
-const CATEGORY_ORDER = ['landing', 'dayselect', 'lobby', 'result', 'survey']
+const CATEGORY_ORDER = [
+  'landing',
+  'dayselect',
+  'lobby',
+  'mission',
+  'result',
+  'survey',
+]
 
 function metaOf(row: TextRow) {
   const fb = FALLBACK_META[row.id]

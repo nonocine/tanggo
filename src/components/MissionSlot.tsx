@@ -77,6 +77,8 @@ export interface MissionSlotProps {
   /** 표시용 번호 */
   slotIndex: number
   onChanged?: () => void
+  /** 제출이 성공했을 때만 호출 — 축하 팝업 트리거 */
+  onSubmitted?: () => void
 }
 
 function SlotBadge({
@@ -180,6 +182,7 @@ export default function MissionSlot({
   locked,
   slotIndex,
   onChanged,
+  onSubmitted,
 }: MissionSlotProps) {
   const [textAnswer, setTextAnswer] = useState('')
   const [choiceIdx, setChoiceIdx] = useState<number | null>(null)
@@ -293,6 +296,7 @@ export default function MissionSlot({
     clearMedia()
     setArtifactName('')
     setResubmit(false)
+    onSubmitted?.()
     onChanged?.()
   }
 
@@ -313,6 +317,7 @@ export default function MissionSlot({
       setError(insertErr.message)
       return
     }
+    onSubmitted?.()
     onChanged?.()
   }
 

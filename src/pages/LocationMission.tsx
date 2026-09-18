@@ -9,6 +9,8 @@ import MissionSlot, {
 } from '../components/MissionSlot'
 import type { AnswerRow, MissionRequestRow } from '../components/MissionSlot'
 import type { Quiz } from '../lib/quizTypes'
+import SubmitCelebration from '../components/SubmitCelebration'
+import { useText } from '../lib/useTextContent'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -34,6 +36,10 @@ export default function LocationMission() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [celebrateSeen, setCelebrateSeen] = useState(false)
+  // 슬롯 1건 제출 성공 시 뜨는 축하 팝업 (장소 전체 완료 모달과는 별개)
+  const [submitCelebrate, setSubmitCelebrate] = useState(false)
+  const celebrateTitle = useText('submit_celebrate_title', '제출 완료!')
+  const celebrateSub = useText('submit_celebrate_sub', '장영실이 칭찬해요')
 
   const fetchAll = useCallback(async () => {
     if (!teamId || !locationGroup) return
@@ -177,6 +183,7 @@ export default function LocationMission() {
                 locked={s.locked}
                 slotIndex={idx + 1}
                 onChanged={fetchAll}
+                onSubmitted={() => setSubmitCelebrate(true)}
               />
             ))}
           </ul>
@@ -200,6 +207,13 @@ export default function LocationMission() {
           </button>
         </div>
       </main>
+
+      <SubmitCelebration
+        open={submitCelebrate}
+        onClose={() => setSubmitCelebrate(false)}
+        message={celebrateTitle}
+        submessage={celebrateSub}
+      />
 
       {/* 전체 슬롯 완료 축하 모달 */}
       {allDone && !celebrateSeen && (

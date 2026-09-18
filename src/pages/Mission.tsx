@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
+import SubmitCelebration from '../components/SubmitCelebration'
+import { useText } from '../lib/useTextContent'
 import type { Quiz } from '../lib/quizTypes'
 import {
   MISSION_SUBTYPE_EMOJI,
@@ -140,7 +142,11 @@ export default function Mission() {
   const [error, setError] = useState<string | null>(null)
   const [openQuiz, setOpenQuiz] = useState<Quiz | null>(null)
   const [celebrate, setCelebrate] = useState(false)
+  // 미션 1건 제출 성공 시 뜨는 축하 팝업 (전체 완료 축하 모달과는 별개)
+  const [submitCelebrate, setSubmitCelebrate] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const celebrateTitle = useText('submit_celebrate_title', '제출 완료!')
+  const celebrateSub = useText('submit_celebrate_sub', '장영실이 칭찬해요')
   const finishingRef = useRef(false)
 
   const fetchAll = useCallback(async () => {
@@ -522,7 +528,7 @@ export default function Mission() {
             fetchAll()
           }}
           onSubmitted={() => {
-            setToast('제출이 완료되었습니다 ✅')
+            setSubmitCelebrate(true)
             fetchAll()
           }}
         />
@@ -559,6 +565,13 @@ export default function Mission() {
           </div>
         </div>
       )}
+
+      <SubmitCelebration
+        open={submitCelebrate}
+        onClose={() => setSubmitCelebrate(false)}
+        message={celebrateTitle}
+        submessage={celebrateSub}
+      />
 
       {toast && (
         <div

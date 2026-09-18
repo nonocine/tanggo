@@ -14,6 +14,15 @@
   --animate-splash-fade: splash-fade 0.6s ease-out 0.3s both;
   --animate-slide-in-down: slide-in-down 0.3s ease-out both;
   --animate-shake: shake 0.5s ease-in-out;
+
+  /* 미션 제출 완료 축하 팝업 (SubmitCelebration) */
+  --animate-celebrate-dim-in: celebrate-dim-in 180ms ease-out both;
+  --animate-celebrate-dim-out: celebrate-dim-out 160ms ease-in both;
+  --animate-celebrate-rays-in: celebrate-rays-in 420ms ease-out both;
+  --animate-celebrate-rays-spin: celebrate-rays-spin 8s linear infinite;
+  --animate-celebrate-pop: celebrate-pop 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-celebrate-text-rise: celebrate-text-rise 420ms ease-out 120ms both;
+  --animate-celebrate-burst: celebrate-burst 900ms cubic-bezier(0.15, 0.75, 0.3, 1) both;
 }
 
 @keyframes splash-rise {
@@ -73,4 +82,90 @@
 :root {
   --shadow-orange: 0 10px 25px -5px rgba(255, 107, 71, 0.15);
   --shadow-orange-sm: 0 4px 12px -2px rgba(255, 107, 71, 0.15);
+}
+
+/* ── 미션 제출 완료 축하 팝업 ─────────────────────────────
+   파티클은 인라인 style 로 --burst-x / --burst-y / --burst-rot 을 주입받는다 */
+
+@keyframes celebrate-dim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes celebrate-dim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes celebrate-rays-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+@keyframes celebrate-rays-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes celebrate-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes celebrate-text-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 사방으로 튀어나간 뒤 후반 40% 구간에서 사라지고, 끝에 살짝 아래로 떨어진다 */
+@keyframes celebrate-burst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  60% {
+    opacity: 1;
+  }
+  70% {
+    transform: translate(var(--burst-x), var(--burst-y)) rotate(var(--burst-rot));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--burst-x), calc(var(--burst-y) + 28px))
+      rotate(var(--burst-rot));
+  }
 }

@@ -29,6 +29,8 @@ const THEME_ASSETS = [
   'og-image.png',
   'apple-touch-icon.png',
   'splash.mp4',
+  'wave.webp',
+  'wave-poster.jpg',
 ]
 
 async function copyThemeAssets() {
