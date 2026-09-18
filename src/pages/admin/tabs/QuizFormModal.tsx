@@ -13,6 +13,7 @@ import {
   QUIZ_TYPE_LABEL,
 } from '../../../lib/quizTypes'
 import { uploadReferenceImage } from '../../../lib/missionMedia'
+import ReferenceImages from '../../../components/ReferenceImages'
 
 interface Props {
   mode: 'create' | 'edit'
@@ -134,6 +135,10 @@ export default function QuizFormModal(props: Props) {
   )
 
   const refUploading = refImages.some((r) => r.uploading)
+  // 참가자 화면과 동일한 뷰어로 보여주는 미리보기 — 업로드가 끝난 항목만
+  const refPreview = refImages
+    .filter((r) => !r.uploading && !r.error)
+    .map((r) => ({ label: r.label, url: r.url }))
 
   async function handlePickFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -609,6 +614,15 @@ export default function QuizFormModal(props: Props) {
             >
               이미지 추가 +
             </button>
+
+            {refPreview.length > 0 && (
+              <div className="mt-3 p-3 rounded-xl border-2 border-dashed border-text-dark/10 bg-cream/30">
+                <p className="text-[11px] font-bold text-text-dark/50">
+                  👀 참가자 화면 미리보기
+                </p>
+                <ReferenceImages images={refPreview} />
+              </div>
+            )}
           </div>
 
           {/* 힌트 */}

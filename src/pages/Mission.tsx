@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import SubmitCelebration from '../components/SubmitCelebration'
+import ReferenceImages from '../components/ReferenceImages'
 import { useText } from '../lib/useTextContent'
 import type { Quiz } from '../lib/quizTypes'
 import {
@@ -880,6 +881,11 @@ function QuizSolveModal({
           <p className="text-base font-semibold text-text-dark whitespace-pre-wrap">
             {quiz.question}
           </p>
+
+          {/* 참고 이미지 — 문제 유형과 무관하게 공통 표시 */}
+          {(quiz.reference_images?.length ?? 0) > 0 && (
+            <ReferenceImages images={quiz.reference_images!} />
+          )}
 
           {/* 풀이 영역 */}
           {locked ? (

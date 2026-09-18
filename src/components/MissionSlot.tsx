@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Quiz, ReferenceImage } from '../lib/quizTypes'
+import type { Quiz } from '../lib/quizTypes'
 import {
   MISSION_SUBTYPE_EMOJI,
   MISSION_SUBTYPE_LABEL,
@@ -14,6 +14,7 @@ import {
 } from '../lib/missionMedia'
 import type { SubmitMode } from '../lib/submitMode'
 import { LEADER_ONLY_NOTICE } from '../lib/submitMode'
+import ReferenceImages from './ReferenceImages'
 
 export interface AnswerRow {
   id: string
@@ -125,69 +126,6 @@ function LeaderOnlyNotice() {
       <p className="mt-0.5 text-xs text-text-dark/55">
         방장이 제출하면 이 화면에도 ✅ 로 표시돼요
       </p>
-    </div>
-  )
-}
-
-function ReferenceImageViewer({ images }: { images: ReferenceImage[] }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null)
-  const open = openIdx !== null ? images[openIdx] : null
-
-  return (
-    <div className="mt-3">
-      <p className="text-xs font-bold text-text-dark/60 mb-1.5">
-        🖼 참고 이미지 (탭하면 크게 보기)
-      </p>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {images.map((img, idx) => (
-          <button
-            key={`${img.url}-${idx}`}
-            type="button"
-            onClick={() => setOpenIdx(idx)}
-            className="shrink-0 w-24 rounded-xl overflow-hidden border-2 border-text-dark/10 bg-white hover:border-orange-main transition-colors"
-          >
-            <img
-              src={img.url}
-              alt={img.label || `참고 이미지 ${idx + 1}`}
-              loading="lazy"
-              className="w-full h-20 object-cover bg-black"
-            />
-            {img.label && (
-              <span className="block px-1 py-1 text-[10px] font-bold text-text-dark/70 truncate">
-                {img.label}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {open && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
-          onClick={() => setOpenIdx(null)}
-        >
-          <div className="max-w-full max-h-full">
-            <img
-              src={open.url}
-              alt={open.label || '참고 이미지'}
-              className="max-w-full max-h-[80vh] object-contain rounded-lg"
-            />
-            {open.label && (
-              <p className="mt-3 text-center text-sm font-bold text-white">
-                {open.label}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setOpenIdx(null)}
-            aria-label="닫기"
-            className="absolute top-4 right-4 w-10 h-10 inline-flex items-center justify-center rounded-full bg-white/90 text-text-dark text-2xl"
-          >
-            ×
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -411,7 +349,7 @@ export default function MissionSlot({
       )}
 
       {/* 참고 이미지 */}
-      {refImages.length > 0 && <ReferenceImageViewer images={refImages} />}
+      {refImages.length > 0 && <ReferenceImages images={refImages} />}
 
       {/* ── 현장 미션 (사진/영상/직접 인증) ─────────────── */}
       {quiz.type === 'mission' && (
