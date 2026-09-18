@@ -56,6 +56,7 @@ interface TeamRow {
 
 interface EventConfigRow {
   service_ended: boolean
+  require_consensus: boolean
 }
 
 type CardStatus = 'submitted' | 'awaiting' | 'todo'
@@ -187,7 +188,7 @@ export default function Mission() {
           .maybeSingle(),
         supabase
           .from('tanggo_event_config')
-          .select('service_ended')
+          .select('service_ended, require_consensus')
           .eq('id', 1)
           .maybeSingle(),
         supabase
@@ -247,6 +248,9 @@ export default function Mission() {
     return () => clearInterval(t)
   }, [fetchAll])
 
+  // 관리자가 끄면 투표 없이 개인이 바로 제출한다 (설정 로딩 전에는 기본값 ON)
+  const requireConsensus = config?.require_consensus ?? true
+
   const reloadVotes = useCallback(
     async (quizId: string) => {
       if (!teamId) return
@@ -260,6 +264,7 @@ export default function Mission() {
   useEffect(() => {
     if (!openQuiz || !teamId) return
     if (openQuiz.type === 'mission') return
+    if (!requireConsensus) return
     const quizId = openQuiz.id
 
     reloadVotes(quizId)
@@ -287,7 +292,7 @@ export default function Mission() {
       clearInterval(t)
       supabase.removeChannel(channel)
     }
-  }, [openQuiz, teamId, reloadVotes])
+  }, [openQuiz, teamId, reloadVotes, requireConsensus])
 
   // 방장 판정 — leader_name 이 없는 예전 팀은 전원이 제출 가능
   const leaderName = team?.leader_name ?? null
@@ -509,6 +514,7 @@ export default function Mission() {
           totalMembers={totalMembers}
           leaderName={leaderName}
           isLeader={isLeader}
+          requireConsensus={requireConsensus}
           votes={votesMap.get(openQuiz.id) ?? []}
           onVoted={() => reloadVotes(openQuiz.id)}
           onClose={() => setOpenQuiz(null)}
@@ -577,6 +583,7 @@ function QuizSolveModal({
   totalMembers,
   leaderName,
   isLeader,
+  requireConsensus,
   votes,
   onVoted,
   onClose,
@@ -593,6 +600,7 @@ function QuizSolveModal({
   totalMembers: number
   leaderName: string | null
   isLeader: boolean
+  requireConsensus: boolean
   votes: MemberVoteRow[]
   onVoted: () => void
   onClose: () => void
@@ -635,8 +643,11 @@ function QuizSolveModal({
 
   /* ── 전원 동의 투표 ─────────────────────────────────
      본인 이름이 확인된 팀원만 투표에 참여한다.
-     memberName 이 없는(예전 저장분) 경우 기존 단독 제출 방식으로 동작. */
-  const votingEnabled = !isMission && !!memberName && totalMembers > 0
+     memberName 이 없는(예전 저장분) 경우 기존 단독 제출 방식으로 동작.
+     관리자가 '팀원 전원 동의 제출'을 끄면(requireConsensus=false) 투표 없이
+     누구나 바로 제출한다. */
+  const votingEnabled =
+    requireConsensus && !isMission && !!memberName && totalMembers > 0
   const myVote = memberName
     ? (votes.find((v) => v.member_name === memberName) ?? null)
     : null

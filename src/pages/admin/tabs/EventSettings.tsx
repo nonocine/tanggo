@@ -24,6 +24,7 @@ interface EventConfig {
   target_teams: number | null
   event_mode: 'single' | 'multi_day'
   days: unknown
+  require_consensus: boolean
 }
 
 function pad(n: number): string {
@@ -362,6 +363,16 @@ export default function EventSettings() {
     setSavingSection(null)
   }
 
+  async function toggleRequireConsensus() {
+    if (!config) return
+    const next = !config.require_consensus
+    await updateConfig(
+      'consensus',
+      { require_consensus: next },
+      next ? '🤝 전원 동의 제출을 켰어요' : '🙋 개인 제출로 전환했어요',
+    )
+  }
+
   async function toggleServiceEnded() {
     if (!config) return
     const next = !config.service_ended
@@ -616,7 +627,40 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 3: 목표 팀 수 */}
+      {/* 섹션 3: 제출 방식 */}
+      <SectionCard icon="🤝" title="제출 방식">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-text-dark">
+              팀원 전원 동의 제출
+            </p>
+            <p className="mt-1 text-xs text-text-dark/60 leading-relaxed">
+              {config.require_consensus
+                ? 'ON · 팀원 모두가 같은 답을 선택해야 방장이 제출할 수 있어요. 아이들의 참여를 유도합니다.'
+                : 'OFF · 각자 자유롭게 답을 제출할 수 있어요.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={config.require_consensus}
+            aria-label="팀원 전원 동의 제출"
+            onClick={toggleRequireConsensus}
+            disabled={savingSection === 'consensus'}
+            className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+              config.require_consensus ? 'bg-orange-main' : 'bg-text-dark/20'
+            }`}
+          >
+            <span
+              className={`inline-block h-7 w-7 transform rounded-full bg-white shadow transition-transform ${
+                config.require_consensus ? 'translate-x-6' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+      </SectionCard>
+
+      {/* 섹션 4: 목표 팀 수 */}
       <SectionCard
         icon="🎯"
         title="목표 팀 수"
@@ -651,7 +695,7 @@ export default function EventSettings() {
         </Field>
       </SectionCard>
 
-      {/* 섹션 4: 공지사항 */}
+      {/* 섹션 5: 공지사항 */}
       <SectionCard
         icon="📢"
         title="공지사항"
@@ -708,7 +752,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 5: 행사 제어 */}
+      {/* 섹션 6: 행사 제어 */}
       <SectionCard icon="🚦" title="행사 제어" tone="red">
         <div className="flex flex-col md:flex-row gap-2">
           <button
@@ -739,7 +783,7 @@ export default function EventSettings() {
         </div>
       </SectionCard>
 
-      {/* 섹션 6: 서비스 종료 토글 */}
+      {/* 섹션 7: 서비스 종료 토글 */}
       <SectionCard icon="🔒" title="서비스 종료 토글">
         <div className="flex items-center justify-between gap-3">
           <div>
