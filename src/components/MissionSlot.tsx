@@ -303,7 +303,8 @@ export default function MissionSlot({
   const editable = (!status || (rejected && resubmit)) && !memberLocked
   const showUploader = (subtype === 'video' || subtype === 'photo') && editable
   const showPhotoWithText = isPhotoWithText && editable
-  const showVerifyButton = subtype === 'verify' && editable
+  // subtype 이 없는 현장 미션도 직접 인증으로 처리한다 (제출 수단이 없어지는 것을 막는다)
+  const showVerifyButton = (subtype === 'verify' || subtype === null) && editable
 
   return (
     <li className="rounded-2xl border border-text-dark/10 bg-white p-4">

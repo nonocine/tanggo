@@ -5,6 +5,7 @@ import { useTeamStore } from '../lib/teamStore'
 import AnnouncementBanner from '../components/AnnouncementBanner'
 import SubmitCelebration from '../components/SubmitCelebration'
 import ReferenceImages from '../components/ReferenceImages'
+import { slotLabelOf } from '../components/MissionSlot'
 import { useText } from '../lib/useTextContent'
 import type { Quiz } from '../lib/quizTypes'
 import {
@@ -53,6 +54,7 @@ interface MissionRequestRow {
   note: string | null
   media_url: string | null
   media_type: 'video' | 'photo' | null
+  slot_label: string | null
 }
 
 interface TeamRow {
@@ -73,6 +75,31 @@ interface EventConfigRow {
 }
 
 type CardStatus = 'submitted' | 'awaiting' | 'todo'
+
+/** photo_with_text — 제출한 사진과 이름을 잠금 상태로 보여준다 (MissionSlot 과 동일) */
+function SubmittedPhotoWithText({
+  request,
+}: {
+  request: MissionRequestRow | undefined
+}) {
+  if (!request?.slot_label) return null
+  return (
+    <div className="mt-3 p-3 rounded-2xl bg-text-dark/5">
+      <p className="text-sm font-bold text-text-dark/60">🔒 제출한 이름</p>
+      <p className="mt-0.5 text-sm font-bold text-text-dark">
+        🏺 {request.slot_label}
+      </p>
+      {request.media_url && (
+        <img
+          src={request.media_url}
+          alt="제출한 사진"
+          loading="lazy"
+          className="mt-2 w-full rounded-xl bg-black max-h-60 object-contain"
+        />
+      )}
+    </div>
+  )
+}
 
 function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -645,10 +672,15 @@ function QuizSolveModal({
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  // photo_with_text — 사진과 함께 제출하는 이름
+  const [artifactName, setArtifactName] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const missionSubtype = quiz.type === 'mission' ? quiz.mission_subtype : null
-  const isUploadKind = missionSubtype === 'video' || missionSubtype === 'photo'
+  // 사진 + 이름을 함께 제출하는 슬롯 — MissionSlot(장소 미션) 과 동일하게 동작한다
+  const isPhotoWithText = missionSubtype === 'photo_with_text'
+  const isUploadKind =
+    missionSubtype === 'video' || missionSubtype === 'photo' || isPhotoWithText
 
   useEffect(() => {
     return () => {
@@ -776,6 +808,11 @@ function QuizSolveModal({
     let mediaUrl: string | null = null
     let mediaType: 'video' | 'photo' | null = null
 
+    if (isPhotoWithText && !artifactName.trim()) {
+      setError('이름을 입력해주세요')
+      return
+    }
+
     if (isUploadKind) {
       if (!mediaFile) {
         setError(
@@ -789,7 +826,10 @@ function QuizSolveModal({
       try {
         const res = await uploadMissionMedia(mediaFile, teamId, quiz.id)
         mediaUrl = res.url
-        mediaType = missionSubtype as 'video' | 'photo'
+        // media_type 컬럼은 video/photo 만 허용 — photo_with_text 도 사진으로 저장
+        mediaType = isPhotoWithText
+          ? 'photo'
+          : (missionSubtype as 'video' | 'photo')
       } catch (e) {
         setError(
           `업로드 실패. 다시 시도해주세요${
@@ -809,6 +849,9 @@ function QuizSolveModal({
       status: 'pending',
       media_url: mediaUrl,
       media_type: mediaType,
+      // 승인 화면에서 무엇을 제출했는지 바로 보이도록 입력한 이름을 슬롯 이름으로 쓴다
+      slot_label: isPhotoWithText ? artifactName.trim() : slotLabelOf(quiz),
+      note: isPhotoWithText ? artifactName.trim() : null,
     })
     if (error) {
       setError(error.message)
@@ -889,28 +932,38 @@ function QuizSolveModal({
 
           {/* 풀이 영역 */}
           {locked ? (
-            <div className="mt-5 p-4 rounded-2xl bg-text-dark/5 text-center">
-              <p className="text-base font-black text-text-dark/60">
-                🔒 제출 완료
-              </p>
-              {answer?.submitted && answer.submitted !== '[현장미션승인]' && (
-                <p className="mt-1 text-xs text-text-dark/60">
-                  제출한 답: {answer.submitted}
+            <>
+              <div className="mt-5 p-4 rounded-2xl bg-text-dark/5 text-center">
+                <p className="text-base font-black text-text-dark/60">
+                  🔒 제출 완료
                 </p>
+                {answer?.submitted && answer.submitted !== '[현장미션승인]' && (
+                  <p className="mt-1 text-xs text-text-dark/60">
+                    제출한 답: {answer.submitted}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-text-dark/50">
+                  결과는 게임이 끝난 뒤 결과 화면에서 확인할 수 있어요
+                </p>
+              </div>
+              {isPhotoWithText && (
+                <SubmittedPhotoWithText request={missionRequest} />
               )}
-              <p className="mt-1 text-xs text-text-dark/50">
-                결과는 게임이 끝난 뒤 결과 화면에서 확인할 수 있어요
-              </p>
-            </div>
+            </>
           ) : missionPending ? (
-            <div className="mt-5 p-4 rounded-2xl bg-[#F4C430]/15 text-center">
-              <p className="text-base font-black text-[#A88300]">
-                🕐 운영자 승인 대기 중...
-              </p>
-              <p className="mt-1 text-xs text-text-dark/70">
-                현장 운영자가 확인하면 자동으로 완료됩니다
-              </p>
-            </div>
+            <>
+              <div className="mt-5 p-4 rounded-2xl bg-[#F4C430]/15 text-center">
+                <p className="text-base font-black text-[#A88300]">
+                  🕐 운영자 승인 대기 중...
+                </p>
+                <p className="mt-1 text-xs text-text-dark/70">
+                  현장 운영자가 확인하면 자동으로 완료됩니다
+                </p>
+              </div>
+              {isPhotoWithText && (
+                <SubmittedPhotoWithText request={missionRequest} />
+              )}
+            </>
           ) : (
             <>
               {quiz.type === 'text' && (
@@ -1041,7 +1094,9 @@ function QuizSolveModal({
                   <p className="text-sm font-bold text-text-dark mb-2">
                     {missionSubtype === 'video'
                       ? '📹 영상을 찍어 올려주세요'
-                      : '📷 사진을 찍어 올려주세요'}
+                      : isPhotoWithText
+                        ? '📷 사진'
+                        : '📷 사진을 찍어 올려주세요'}
                   </p>
 
                   <input
@@ -1073,7 +1128,7 @@ function QuizSolveModal({
                           className="w-full rounded-xl bg-black max-h-72 object-contain"
                         />
                       )}
-                      {missionSubtype === 'photo' && mediaPreviewUrl && (
+                      {missionSubtype !== 'video' && mediaPreviewUrl && (
                         <img
                           src={mediaPreviewUrl}
                           alt="선택한 사진 미리보기"
@@ -1117,6 +1172,33 @@ function QuizSolveModal({
                       <div className="mt-2 h-1.5 rounded-full bg-orange-main/20 overflow-hidden">
                         <div className="h-full w-full bg-orange-main animate-pulse" />
                       </div>
+                    </div>
+                  )}
+
+                  {/* photo_with_text — 사진 아래 이름 입력칸 */}
+                  {isPhotoWithText && (
+                    <div className="mt-4">
+                      <p className="text-sm font-bold text-text-dark mb-2">
+                        ✏️ 이름
+                      </p>
+                      <input
+                        type="text"
+                        placeholder="이름을 입력해주세요"
+                        value={artifactName}
+                        onChange={(e) => setArtifactName(e.target.value)}
+                        disabled={uploading || submitting}
+                        autoComplete="off"
+                        className="w-full px-4 py-3 rounded-2xl border-2 border-text-dark/20 bg-white text-base font-medium text-text-dark placeholder:text-text-dark/30 focus:outline-none focus:border-orange-main focus:ring-2 focus:ring-orange-main/20 disabled:opacity-50"
+                      />
+                      {(!mediaFile || !artifactName.trim()) && (
+                        <p className="mt-2 text-xs font-semibold text-text-dark/55">
+                          {!mediaFile && !artifactName.trim()
+                            ? '사진과 이름을 모두 채워야 제출할 수 있어요'
+                            : !mediaFile
+                              ? '사진을 올려주세요'
+                              : '이름을 입력해주세요'}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1215,12 +1297,14 @@ function QuizSolveModal({
                 disabled={
                   submitting ||
                   uploading ||
-                  (isUploadKind && !mediaFile)
+                  (isUploadKind && !mediaFile) ||
+                  (isPhotoWithText && !artifactName.trim())
                 }
                 className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
                   submitting ||
                   uploading ||
-                  (isUploadKind && !mediaFile)
+                  (isUploadKind && !mediaFile) ||
+                  (isPhotoWithText && !artifactName.trim())
                     ? 'bg-text-dark/15 text-text-dark/40 cursor-not-allowed'
                     : 'bg-orange-main text-white hover:bg-orange-sub'
                 }`}
